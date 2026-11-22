@@ -222,5 +222,5 @@ $$;
 
 drop trigger if exists payroll_runs_no_overlap on public.payroll_runs;
 create trigger payroll_runs_no_overlap
-before insert or update of period_start, period_end on public.payroll_runs
+before insert or update on public.payroll_runs
 for each row execute function public.prevent_overlapping_payroll_runs();
