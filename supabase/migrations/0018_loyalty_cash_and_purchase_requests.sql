@@ -101,7 +101,11 @@ begin
  update public.purchase_requests set status='Approved',approved_by=auth.uid(),approved_at=now(),updated_at=now() where id=p_request_id and status='Submitted';
  if not found then raise exception 'Submitted purchase request not found'; end if;
 end $$;
-revoke execute on all functions in schema public from public,anon;
+revoke execute on function public.open_cash_session(numeric,text) from public,anon;
+revoke execute on function public.record_cash_session_entry(uuid,text,numeric,text) from public,anon;
+revoke execute on function public.close_cash_session(uuid,numeric,text) from public,anon;
+revoke execute on function public.submit_purchase_request(uuid) from public,anon;
+revoke execute on function public.approve_purchase_request(uuid) from public,anon;
 grant execute on function public.open_cash_session(numeric,text) to authenticated;
 grant execute on function public.record_cash_session_entry(uuid,text,numeric,text) to authenticated;
 grant execute on function public.close_cash_session(uuid,numeric,text) to authenticated;
