@@ -372,9 +372,9 @@ export default function App() {
               <button className="primary" disabled={busy}>{busy ? 'Saving…' : 'Save customer'}</button>
             </form></article>
             <article><div className="toolbar"><h3>Customer list ({customers.length})</h3><input placeholder="Search name, phone or email…" value={customerQuery} onChange={e => setCustomerQuery(e.target.value)} /><button onClick={() => void loadCustomers()}>Refresh</button></div>
-              <div className="tablewrap"><table><thead><tr><th>CUSTOMER</th><th>PHONE</th><th>EMAIL</th><th>ORDERS</th><th>TOTAL SPENT</th></tr></thead><tbody>
-                {customers.filter(c => `${c.full_name} ${c.phone || ''} ${c.email || ''}`.toLowerCase().includes(customerQuery.toLowerCase())).map(c => { const customerSales = sales.filter(s => { const linked = Array.isArray(s.customers) ? s.customers[0] : s.customers; return linked?.id === c.id }); return <tr key={c.id}><td><b>{c.full_name}</b></td><td>{c.phone || '—'}</td><td>{c.email || '—'}</td><td>{customerSales.length}</td><td>{money(customerSales.reduce((sum,s)=>sum+Number(s.total),0))}</td></tr> })}
-                {customers.length === 0 && <tr><td colSpan={5}>No customers added yet.</td></tr>}
+              <div className="tablewrap"><table><thead><tr><th>CUSTOMER</th><th>PHONE</th><th>EMAIL</th><th>ORDERS</th><th>TOTAL SPENT</th><th>PURCHASE HISTORY</th></tr></thead><tbody>
+                {customers.filter(c => `${c.full_name} ${c.phone || ''} ${c.email || ''}`.toLowerCase().includes(customerQuery.toLowerCase())).map(c => { const customerSales = sales.filter(s => { const linked = Array.isArray(s.customers) ? s.customers[0] : s.customers; return linked?.id === c.id }); return <tr key={c.id}><td><b>{c.full_name}</b></td><td>{c.phone || '—'}</td><td>{c.email || '—'}</td><td>{customerSales.length}</td><td>{money(customerSales.reduce((sum,s)=>sum+Number(s.total),0))}</td><td><button className="small-action" onClick={() => { setSalesQuery(c.full_name); setPage('Sales History') }}>View sales</button></td></tr> })}
+                {customers.length === 0 && <tr><td colSpan={6}>No customers added yet.</td></tr>}
               </tbody></table></div>
             </article>
           </div>
