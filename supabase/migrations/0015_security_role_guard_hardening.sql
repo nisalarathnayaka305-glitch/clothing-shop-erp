@@ -12,7 +12,7 @@ begin
     join pg_namespace n on n.oid = p.pronamespace
     where n.nspname = 'public'
       and p.prosecdef
-      and position('current_employee_role() not in' in pg_get_functiondef(p.oid)) > 0
+      and position('if public.current_employee_role() not in' in pg_get_functiondef(p.oid)) > 0
   loop
     v_definition := regexp_replace(
       r.definition,
