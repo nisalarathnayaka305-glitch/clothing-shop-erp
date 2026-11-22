@@ -843,7 +843,8 @@ export default function App() {
   }
 
   function printBarcodeLabels(product: Product, productVariants: ProductVariant[]) {
-    const labels = productVariants.map(v => `<div class="label"><strong>${product.name}</strong><span>${product.product_no} · ${v.size} / ${v.colour}</span><b>${v.barcode || 'BARCODE NOT SET'}</b><small>${v.barcode ? 'Scan code / SKU' : 'Add a barcode before scanning'}</small></div>`).join('')
+    const escapeHtml = (value: unknown) => String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char] || char))
+    const labels = productVariants.map(v => `<div class="label"><strong>${escapeHtml(product.name)}</strong><span>${escapeHtml(product.product_no)} · ${escapeHtml(v.size)} / ${escapeHtml(v.colour)}</span><b>${escapeHtml(v.barcode || 'BARCODE NOT SET')}</b><small>${v.barcode ? 'Scan code / SKU' : 'Add a barcode before scanning'}</small></div>`).join('')
     const win=window.open('', '_blank', 'width=900,height=650'); if (!win) { setNotice('Allow pop-ups to print barcode labels.'); return }
     win.document.write(`<!doctype html><html><head><title>Product Labels</title><style>body{font-family:Arial;padding:12px}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.label{border:1px dashed #555;padding:12px;min-height:85px;display:flex;flex-direction:column;gap:5px;break-inside:avoid}.label strong{font-size:13px}.label span,.label small{font-size:10px}.label b{font-family:monospace;font-size:18px;letter-spacing:2px}@media print{@page{margin:6mm}.label{border:1px solid #aaa}}</style></head><body><div class="grid">${labels}</div><script>window.onload=()=>window.print()</script></body></html>`); win.document.close()
   }
