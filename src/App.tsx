@@ -15,7 +15,7 @@ type POSVariant = ProductVariant & { product_no: string; product_name: string; s
 type CartLine = { variant_id: string; product_no: string; name: string; sku: string; size: string; colour: string; unit_price: number; quantity: number; available: number }
 type Invoice = { invoice_no: string; subtotal: number; discount: number; total: number; amount_received: number; change_amount: number; payment_method: string; created_at: string; items: CartLine[] }
 
-const navigation = ['Overview', 'Point of Sale', 'Sales History', 'Returns & Exchanges', 'Products & Stock', 'Purchases', 'Customers', 'Suppliers', 'Expenses', 'Reports', 'Employees', 'Settings']
+const navigation = ['Overview', 'Point of Sale', 'Sales History', 'Returns & Exchanges', 'Products & Stock', 'Purchases', 'Customers', 'Suppliers', 'Expenses', 'Reports', 'Employees', 'Attendance', 'Payroll', 'Settings']
 
 export default function App() {
   const [products, setProducts] = useState<Product[]>(demo)
@@ -74,7 +74,15 @@ export default function App() {
   const [currentEmployeeRole, setCurrentEmployeeRole] = useState<string | null>(null)
   const [employeeQuery, setEmployeeQuery] = useState('')
   const [employeeEditingId, setEmployeeEditingId] = useState<string | null>(null)
-  const [employeeForm, setEmployeeForm] = useState({ full_name: '', email: '', phone: '', job_title: '', department: '', employment_type: 'Full-time', hire_date: new Date().toISOString().slice(0,10), auth_user_id: '', role: 'Staff', status: 'Active', notes: '' })
+  const [employeeForm, setEmployeeForm] = useState({ full_name: '', email: '', phone: '', job_title: '', department: '', employment_type: 'Full-time', hire_date: new Date().toISOString().slice(0,10), auth_user_id: '', role: 'Staff', status: 'Active', salary_basis: 'Monthly', base_salary: '0', notes: '' })
+  const [attendanceRecords, setAttendanceRecords] = useState<any[]>([])
+  const [attendanceDate, setAttendanceDate] = useState(new Date().toISOString().slice(0,10))
+  const [attendanceEmployeeId, setAttendanceEmployeeId] = useState('')
+  const [payrollRuns, setPayrollRuns] = useState<any[]>([])
+  const [payrollStart, setPayrollStart] = useState(new Date(new Date().getFullYear(),new Date().getMonth(),1).toISOString().slice(0,10))
+  const [payrollEnd, setPayrollEnd] = useState(new Date(new Date().getFullYear(),new Date().getMonth()+1,0).toISOString().slice(0,10))
+  const [payrollDeductions, setPayrollDeductions] = useState<Record<string,string>>({})
+
 
   useEffect(() => {
     if (!supabase) return
@@ -108,6 +116,104 @@ export default function App() {
     } else {
       setEmployees(ownProfile ? [ownProfile] : [])
     }
+  }
+
+  async function loadAttendance() {
+    if (!supabase || !session) return
+    let request = supabase.from('employee_attendance')
+      .select('id,employee_id,work_date,check_in,check_out,break_minutes,status,notes,employees(id,employee_no,full_name,job_title,salary_basis,base_salary,auth_user_id)')
+      .order('work_date', { ascending: false }).limit(1000)
+    if (currentEmployeeRole !== 'Admin' && currentEmployeeRole !== 'Manager') {
+      const own = employees.find(e => e.auth_user_id === session.user.id)
+      if (!own) { setAttendanceRecords([]); return }
+      request = request.eq('employee_id', own.id) as typeof request
+    }
+    const { data, error } = await request
+    if (error) setNotice(error.message)
+    else if (data) setAttendanceRecords(data)
+  }
+
+  async function loadPayrollRuns() {
+    if (!supabase || !session || !['Admin','Manager'].includes(currentEmployeeRole || '')) return
+    const { data, error } = await supabase.from('payroll_runs')
+      .select('id,period_start,period_end,status,total_gross,total_deductions,total_net,created_at,paid_at,payroll_items(id,employee_id,salary_basis,base_salary,days_present,hours_worked,gross_pay,deductions,net_pay,notes,employees(full_name,employee_no))')
+      .order('period_start', { ascending: false }).limit(24)
+    if (error) setNotice(error.message)
+    else if (data) setPayrollRuns(data)
+  }
+
+  async function punchIn(employeeId: string) {
+    if (!employeeId || !session) { setNotice('Link this login to an employee record before recording attendance.'); return }
+    const own = employees.find(e => e.auth_user_id === session.user.id)
+    if (!['Admin','Manager'].includes(currentEmployeeRole || '') && own?.id !== employeeId) {
+      setNotice('You can only record attendance for your own employee profile.'); return
+    }
+    setBusy(true)
+    const row = { employee_id: employeeId, work_date: attendanceDate, check_in: new Date().toISOString(), status: 'Present', created_by: session.user.id }
+    const { data, error } = await supabase!.from('employee_attendance').upsert(row, { onConflict: 'employee_id,work_date' })
+      .select('id,employee_id,work_date,check_in,check_out,break_minutes,status,notes,employees(id,employee_no,full_name,job_title,salary_basis,base_salary,auth_user_id)').single()
+    if (error) setNotice(error.message)
+    else { setAttendanceRecords(current => [data,...current.filter(x=>!(x.employee_id===employeeId && x.work_date===attendanceDate))]); setNotice('Attendance check-in recorded.') }
+    setBusy(false)
+  }
+
+  async function punchOut(record: any) {
+    if (!record?.id || !session) return
+    setBusy(true)
+    const { data, error } = await supabase!.from('employee_attendance').update({ check_out: new Date().toISOString() }).eq('id',record.id)
+      .select('id,employee_id,work_date,check_in,check_out,break_minutes,status,notes,employees(id,employee_no,full_name,job_title,salary_basis,base_salary,auth_user_id)').single()
+    if (error) setNotice(error.message)
+    else { setAttendanceRecords(current=>current.map(x=>x.id===record.id?data:x)); setNotice('Attendance check-out recorded.') }
+    setBusy(false)
+  }
+
+  async function updateAttendanceStatus(record: any, status: string) {
+    if (!['Admin','Manager'].includes(currentEmployeeRole || '')) return
+    const { data, error } = await supabase!.from('employee_attendance').update({ status }).eq('id',record.id)
+      .select('id,employee_id,work_date,check_in,check_out,break_minutes,status,notes,employees(id,employee_no,full_name,job_title,salary_basis,base_salary,auth_user_id)').single()
+    if (error) setNotice(error.message)
+    else setAttendanceRecords(current=>current.map(x=>x.id===record.id?data:x))
+  }
+
+  function attendanceHours(record: any) {
+    if (!record?.check_in || !record?.check_out) return 0
+    return Math.max(0,(new Date(record.check_out).getTime()-new Date(record.check_in).getTime())/3600000-Number(record.break_minutes||0)/60)
+  }
+
+  async function createPayrollRun() {
+    if (!['Admin','Manager'].includes(currentEmployeeRole || '') || !session) { setNotice('Only Admin or Manager can prepare payroll.'); return }
+    if (payrollEnd < payrollStart) { setNotice('Payroll end date must be on or after the start date.'); return }
+    if (employees.filter(e=>e.status==='Active').length===0) { setNotice('No active employees are available for payroll.'); return }
+    const duplicate=payrollRuns.find(r=>r.period_start===payrollStart && r.period_end===payrollEnd)
+    if (duplicate) { setNotice('A payroll run already exists for this period.'); return }
+    setBusy(true)
+    const active=employees.filter(e=>e.status==='Active')
+    const items=active.map(employee=>{
+      const rows=attendanceRecords.filter(r=>r.employee_id===employee.id && r.work_date>=payrollStart && r.work_date<=payrollEnd)
+      const hours=rows.reduce((sum,r)=>sum+attendanceHours(r),0)
+      const days=rows.reduce((sum,r)=>sum+(r.status==='Half-day'?0.5:['Present','Late'].includes(r.status)?1:0),0)
+      const basis=employee.salary_basis||'Monthly'
+      const rate=Number(employee.base_salary||0)
+      const gross=basis==='Hourly'?hours*rate:rate
+      const deduction=Math.min(gross,Math.max(0,Number(payrollDeductions[employee.id]||0)))
+      return { employee_id:employee.id,salary_basis:basis,base_salary:rate,days_present:days,hours_worked:Number(hours.toFixed(2)),gross_pay:Number(gross.toFixed(2)),deductions:Number(deduction.toFixed(2)),net_pay:Number((gross-deduction).toFixed(2)) }
+    })
+    const totals={gross:items.reduce((n,x)=>n+x.gross_pay,0),deductions:items.reduce((n,x)=>n+x.deductions,0),net:items.reduce((n,x)=>n+x.net_pay,0)}
+    const { data:run,error:runError }=await supabase!.from('payroll_runs').insert({period_start:payrollStart,period_end:payrollEnd,status:'Draft',total_gross:totals.gross,total_deductions:totals.deductions,total_net:totals.net,created_by:session.user.id}).select('id').single()
+    if(runError){setNotice(runError.message);setBusy(false);return}
+    const {error:itemError}=await supabase!.from('payroll_items').insert(items.map(x=>({...x,payroll_run_id:run.id})))
+    if(itemError){await supabase!.from('payroll_runs').delete().eq('id',run.id);setNotice(itemError.message);setBusy(false);return}
+    setNotice('Draft payroll created. Review the figures before marking it as paid.')
+    await loadPayrollRuns()
+    setBusy(false)
+  }
+
+  async function markPayrollPaid(run: any) {
+    if (!['Admin','Manager'].includes(currentEmployeeRole || '') || run.status!=='Draft') return
+    if (!window.confirm('Confirm that all employees in this payroll run have actually been paid?')) return
+    const { error }=await supabase!.from('payroll_runs').update({status:'Paid',paid_at:new Date().toISOString()}).eq('id',run.id)
+    if(error) setNotice(error.message)
+    else { setPayrollRuns(current=>current.map(x=>x.id===run.id?{...x,status:'Paid',paid_at:new Date().toISOString()}:x));setNotice('Payroll marked as paid.') }
   }
 
   async function loadProducts() {
@@ -302,7 +408,8 @@ export default function App() {
     setPosVariants(mapped)
   }
 
-  useEffect(() => { if (session) { void loadProducts(); void loadPOSVariants(); void loadCustomers(); void loadSales(); void loadReturns(); void loadSuppliers(); void loadPurchases(); void loadExpenses(); void loadEmployees() } else { setEmployees([]); setCurrentEmployeeRole(supabaseConfigured ? null : 'Admin') } }, [session])
+  useEffect(() => { if (session) { void loadProducts(); void loadPOSVariants(); void loadCustomers(); void loadSales(); void loadReturns(); void loadSuppliers(); void loadPurchases(); void loadExpenses(); void loadEmployees() } else { setEmployees([]); setCurrentEmployeeRole(supabaseConfigured ? null : 'Admin'); setAttendanceRecords([]); setPayrollRuns([]) } }, [session])
+  useEffect(() => { if (session && employees.length) { void loadAttendance(); if (['Admin','Manager'].includes(currentEmployeeRole || '')) void loadPayrollRuns() } }, [session, employees.length, currentEmployeeRole])
   useEffect(() => { if (activeProduct) void loadVariants(activeProduct.id) }, [activeProduct?.id, session])
 
   function addToCart(variant: POSVariant) {
