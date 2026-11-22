@@ -35,6 +35,7 @@ on public.expenses for insert to authenticated with check (auth.uid() = created_
 create or replace function public.assign_expense_number()
 returns trigger
 language plpgsql
+security definer
 set search_path = public
 as $$
 begin
