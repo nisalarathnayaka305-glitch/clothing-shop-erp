@@ -539,17 +539,45 @@ export default function App() {
 
   async function loadPOSVariants() {
     if (!supabase || !session) return
-    const { data, error } = await supabase.from('product_variants')
-      .select('id,product_id,size,colour,barcode,products!inner(id,product_no,name,sku,selling_price,active),stock_balances(quantity,reorder_level)')
-      .eq('products.active', true).order('size')
-    if (error) { setNotice(error.message); return }
-    const mapped = (data || []).map((row: any) => {
-      const product = Array.isArray(row.products) ? row.products[0] : row.products
-      const stock = Array.isArray(row.stock_balances) ? row.stock_balances[0] : row.stock_balances
-      return { id: row.id, product_id: row.product_id, size: row.size, colour: row.colour, barcode: row.barcode,
-        quantity: stock?.quantity ?? 0, reorder_level: stock?.reorder_level ?? 5,
-        product_no: product?.product_no ?? '', product_name: product?.name ?? '', sku: product?.sku ?? '',
-        selling_price: Number(product?.selling_price ?? 0) } as POSVariant
+
+    // Load each table separately so PostgREST relationship embedding cannot
+    // silently leave the POS without inventory rows.
+    const { data: productRows, error: productError } = await supabase.from('products')
+      .select('id,product_no,name,sku,selling_price')
+      .eq('active', true)
+    if (productError) { setNotice(`Could not load products: ${productError.message}`); return }
+
+    const activeProducts = productRows || []
+    if (activeProducts.length === 0) { setPosVariants([]); return }
+
+    const productIds = activeProducts.map((product: any) => product.id)
+    const { data: variantRows, error: variantError } = await supabase.from('product_variants')
+      .select('id,product_id,size,colour,barcode')
+      .in('product_id', productIds)
+      .order('size')
+    if (variantError) { setNotice(`Could not load size/colour variants: ${variantError.message}`); return }
+
+    const activeVariants = variantRows || []
+    if (activeVariants.length === 0) { setPosVariants([]); return }
+
+    const variantIds = activeVariants.map((variant: any) => variant.id)
+    const { data: stockRows, error: stockError } = await supabase.from('stock_balances')
+      .select('variant_id,quantity,reorder_level')
+      .in('variant_id', variantIds)
+    if (stockError) { setNotice(`Could not load stock balances: ${stockError.message}`); return }
+
+    const productsById = new Map(activeProducts.map((product: any) => [product.id, product]))
+    const stockByVariantId = new Map((stockRows || []).map((stock: any) => [stock.variant_id, stock]))
+    const mapped = activeVariants.map((variant: any) => {
+      const product: any = productsById.get(variant.product_id)
+      const stock: any = stockByVariantId.get(variant.id)
+      return {
+        id: variant.id, product_id: variant.product_id, size: variant.size, colour: variant.colour,
+        barcode: variant.barcode, quantity: Number(stock?.quantity ?? 0),
+        reorder_level: Number(stock?.reorder_level ?? 5), product_no: product?.product_no ?? '',
+        product_name: product?.name ?? '', sku: product?.sku ?? '',
+        selling_price: Number(product?.selling_price ?? 0),
+      } as POSVariant
     })
     setPosVariants(mapped)
   }
