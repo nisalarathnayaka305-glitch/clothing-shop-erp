@@ -64,7 +64,7 @@ using (public.current_employee_role() in ('Admin','Manager'));
 grant select, insert, update, delete on public.employee_attendance to authenticated;
 
 create or replace function public.set_attendance_updated_at()
-returns trigger language plpgsql set search_path = public as $$
+returns trigger language plpgsql set search_path = public as $$$
 begin
   new.updated_at = now();
   return new;
@@ -78,7 +78,7 @@ for each row execute function public.set_attendance_updated_at();
 
 -- Employees can only punch their own attendance through server-timestamped RPCs.
 create or replace function public.employee_check_in(p_work_date date)
-returns uuid language plpgsql security definer set search_path = public as $
+returns uuid language plpgsql security definer set search_path = public as $$
 declare v_employee_id uuid; v_attendance_id uuid;
 begin
   if auth.uid() is null then raise exception 'Authentication required'; end if;
@@ -93,10 +93,10 @@ begin
         status='Present'
   returning id into v_attendance_id;
   return v_attendance_id;
-end; $;
+end; $$;
 
 create or replace function public.employee_check_out(p_work_date date)
-returns uuid language plpgsql security definer set search_path = public as $
+returns uuid language plpgsql security definer set search_path = public as $$
 declare v_employee_id uuid; v_attendance_id uuid;
 begin
   if auth.uid() is null then raise exception 'Authentication required'; end if;
@@ -110,10 +110,10 @@ begin
    returning id into v_attendance_id;
   if v_attendance_id is null then raise exception 'No open check-in was found for this date'; end if;
   return v_attendance_id;
-end; $;
+end; $$;
 
 create or replace function public.manager_check_in(p_employee_id uuid,p_work_date date)
-returns uuid language plpgsql security definer set search_path = public as $
+returns uuid language plpgsql security definer set search_path = public as $$
 declare v_attendance_id uuid;
 begin
   if public.current_employee_role() not in ('Admin','Manager') then raise exception 'Only Admin or Manager can record attendance for another employee'; end if;
@@ -125,10 +125,10 @@ begin
     set check_in=coalesce(public.employee_attendance.check_in,excluded.check_in), status='Present'
   returning id into v_attendance_id;
   return v_attendance_id;
-end; $;
+end; $$;
 
 create or replace function public.manager_check_out(p_attendance_id uuid)
-returns uuid language plpgsql security definer set search_path = public as $
+returns uuid language plpgsql security definer set search_path = public as $$
 declare v_attendance_id uuid;
 begin
   if public.current_employee_role() not in ('Admin','Manager') then raise exception 'Only Admin or Manager can record attendance for another employee'; end if;
@@ -137,7 +137,7 @@ begin
    returning id into v_attendance_id;
   if v_attendance_id is null then raise exception 'No open check-in was found'; end if;
   return v_attendance_id;
-end; $;
+end; $$;
 
 revoke all on function public.employee_check_in(date) from public;
 revoke all on function public.employee_check_out(date) from public;
