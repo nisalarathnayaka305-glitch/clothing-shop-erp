@@ -641,11 +641,13 @@ export default function App() {
       const demoInvoiceNo = `DEMO-${Date.now()}`
       const demoCustomer = customers.find(c => c.id === selectedCustomer) || null
       const demoCreatedAt = new Date().toISOString()
+      const demoPayment = paymentMethod==='Credit' && received>0 ? { id: crypto.randomUUID(), payment_no: `CP-DEMO-${Date.now()}`, customer_id: demoCustomer?.id, sale_id: demoInvoiceNo, amount: received, payment_method: creditPaymentMethod, payment_date: localBusinessDate(), reference_no: null, customers: demoCustomer, sales: { invoice_no: demoInvoiceNo, total: cartTotal } } : null
       setLastInvoice({ invoice_no: demoInvoiceNo, subtotal: cartSubtotal, discount: discountValue, total: cartTotal,
-        amount_received: received, change_amount: received - cartTotal, payment_method: paymentMethod, created_at: demoCreatedAt, items: invoiceItems })
+        amount_received: received, change_amount: paymentMethod==='Credit'?0:received - cartTotal, payment_method: paymentMethod, created_at: demoCreatedAt, items: invoiceItems })
       setSales(current => [{ id: demoInvoiceNo, invoice_no: demoInvoiceNo, subtotal: cartSubtotal, discount: discountValue, total: cartTotal,
         amount_received: received, change_amount: paymentMethod==='Credit'?0:received - cartTotal, payment_method: paymentMethod, customer_id: demoCustomer?.id || null, created_at: demoCreatedAt,
-        customers: demoCustomer, sale_items: invoiceItems.map((line,i) => ({ id: `${demoInvoiceNo}-${i}`, product_no: line.product_no, product_name: line.name, sku: line.sku, size: line.size, colour: line.colour, quantity: line.quantity, unit_price: line.unit_price, line_total: line.unit_price * line.quantity })) }, ...current])
+        customer_payments: demoPayment?[demoPayment]:[], customers: demoCustomer, sale_items: invoiceItems.map((line,i) => ({ id: `${demoInvoiceNo}-${i}`, product_no: line.product_no, product_name: line.name, sku: line.sku, size: line.size, colour: line.colour, quantity: line.quantity, unit_price: line.unit_price, line_total: line.unit_price * line.quantity })) }, ...current])
+      if (demoPayment) setCustomerPayments(current=>[demoPayment,...current])
       setNotice('Demo sale completed locally only. No data was saved to Supabase.')
     }
     setCart([]); setDiscount('0'); setAmountReceived(''); setSelectedCustomer(''); setBusy(false)
