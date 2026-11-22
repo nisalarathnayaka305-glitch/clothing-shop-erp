@@ -20,7 +20,7 @@ create or replace function public.adjust_stock(
 )
 returns void
 language plpgsql
-security invoker
+security definer
 set search_path = public
 as $$
 begin
