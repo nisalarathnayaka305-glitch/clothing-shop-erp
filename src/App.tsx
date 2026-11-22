@@ -848,6 +848,22 @@ export default function App() {
     win.document.write(`<!doctype html><html><head><title>Product Labels</title><style>body{font-family:Arial;padding:12px}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.label{border:1px dashed #555;padding:12px;min-height:85px;display:flex;flex-direction:column;gap:5px;break-inside:avoid}.label strong{font-size:13px}.label span,.label small{font-size:10px}.label b{font-family:monospace;font-size:18px;letter-spacing:2px}@media print{@page{margin:6mm}.label{border:1px solid #aaa}}</style></head><body><div class="grid">${labels}</div><script>window.onload=()=>window.print()</script></body></html>`); win.document.close()
   }
 
+  async function exportDataBackup() {
+    if (!supabase || !session) { setNotice('Sign in to export a database backup.'); return }
+    setBusy(true)
+    const tables = ['products','product_variants','stock_balances','stock_movements','customers','suppliers','sales','sale_items','sales_returns','sales_return_items','purchase_orders','purchase_items','supplier_payments','customer_payments','expenses','employees','employee_attendance','payroll_runs','payroll_items']
+    const backup: Record<string, unknown> = { exported_at: new Date().toISOString(), format_version: 1, tables: {} }
+    for (const table of tables) {
+      const { data, error } = await supabase.from(table).select('*').limit(10000)
+      if (error) { setNotice('Backup stopped at '+table+': '+error.message); setBusy(false); return }
+      ;(backup.tables as Record<string, unknown>)[table] = data || []
+    }
+    const blob = new Blob([JSON.stringify(backup,null,2)],{type:'application/json'})
+    const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='clothing-erp-backup-'+localBusinessDate()+'.json'; a.click(); URL.revokeObjectURL(url)
+    setNotice('Database data export downloaded. Store it securely; this file contains customer and employee information.')
+    setBusy(false)
+  }
+
   const filtered = products.filter(p => `${p.product_no} ${p.name} ${p.sku} ${p.category || ''}`.toLowerCase().includes(query.toLowerCase()))
   const todayKey = new Date().toLocaleDateString('en-CA')
   const monthKey = todayKey.slice(0,7)
@@ -1233,6 +1249,11 @@ export default function App() {
               </tbody></table></div>
             </article>
           </div>
+        </> : page === 'Settings' ? <>
+          <div className="heading"><div><p className="eyebrow">SYSTEM ADMINISTRATION</p><h1>Settings & Data Backup</h1><p>Export operational data for secure offline retention.</p></div></div>
+          <article><h3>Database data export</h3><p className="muted">Downloads up to 10,000 rows per operational table in a JSON file. This is a data export, not a full Supabase point-in-time backup; it does not include authentication credentials, database schema, storage files or project settings.</p><button className="primary" disabled={busy || !['Admin'].includes(currentEmployeeRole||'')} onClick={()=>void exportDataBackup()}>{busy?'Preparing export…':'Download data backup (JSON)'}</button>{currentEmployeeRole!=='Admin'&&<p className="muted">Only Admin users can export the database data.</p>}</article>
+          <article><h3>Inventory tools</h3><p className="muted">Download product, size, colour, barcode and stock information for spreadsheet review.</p><button onClick={exportInventoryCSV}>Export inventory CSV</button></article>
+          <article><h3>Security reminder</h3><p className="muted">Keep downloaded backups in an access-controlled location. They may contain customer contact details, employee records and sales information.</p></article>
         </> : <article className="empty"><h2>{page}</h2><p>This module is planned for a later development phase.</p></article>}
       </section>
     </main>
