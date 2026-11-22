@@ -140,7 +140,8 @@ export default function App() {
     if (!cart.length) { setNotice('Add at least one item to the cart.'); return }
     if (discountValue > cartSubtotal) { setNotice('Discount cannot exceed the subtotal.'); return }
     const received = Number(amountReceived)
-    if (!Number.isFinite(received) || received < cartTotal) { setNotice('Amount received must be equal to or greater than the total.'); return }\n    if (paymentMethod !== 'Cash' && received !== cartTotal) { setNotice('For card or bank transfer, enter the exact sale total.'); return }
+    if (!Number.isFinite(received) || received < cartTotal) { setNotice('Amount received must be equal to or greater than the total.'); return }
+    if (paymentMethod !== 'Cash' && received !== cartTotal) { setNotice('For card or bank transfer, enter the exact sale total.'); return }
     setBusy(true)
     const invoiceItems = cart.map(line => ({ ...line }))
     if (supabase && session) {
