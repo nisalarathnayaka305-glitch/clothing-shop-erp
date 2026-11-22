@@ -15,7 +15,7 @@ type POSVariant = ProductVariant & { product_no: string; product_name: string; s
 type CartLine = { variant_id: string; product_no: string; name: string; sku: string; size: string; colour: string; unit_price: number; quantity: number; available: number }
 type Invoice = { invoice_no: string; subtotal: number; discount: number; total: number; amount_received: number; change_amount: number; payment_method: string; created_at: string; items: CartLine[] }
 
-const navigation = ['Overview', 'Point of Sale', 'Sales History', 'Returns & Exchanges', 'Products & Stock', 'Purchases', 'Customers', 'Suppliers', 'Supplier Accounts', 'Expenses', 'Reports', 'Employees', 'Attendance', 'Payroll', 'Settings']
+const navigation = ['Overview', 'Point of Sale', 'Sales History', 'Returns & Exchanges', 'Products & Stock', 'Purchases', 'Customers', 'Customer Accounts', 'Suppliers', 'Supplier Accounts', 'Expenses', 'Reports', 'Employees', 'Attendance', 'Payroll', 'Settings']
 const localBusinessDate = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Colombo' }).format(new Date())
 
 export default function App() {
@@ -46,6 +46,10 @@ export default function App() {
   const [customerQuery, setCustomerQuery] = useState('')
   const [customerForm, setCustomerForm] = useState({ full_name: '', phone: '', email: '' })
   const [selectedCustomer, setSelectedCustomer] = useState('')
+  const [customerPayments, setCustomerPayments] = useState<any[]>([])
+  const [creditPaymentMethod, setCreditPaymentMethod] = useState('Cash')
+  const [customerAccountQuery, setCustomerAccountQuery] = useState('')
+  const [customerPaymentForm, setCustomerPaymentForm] = useState({ sale_id: '', amount: '', payment_method: 'Cash', payment_date: new Date().toISOString().slice(0,10), reference_no: '', notes: '' })
   const [sales, setSales] = useState<any[]>([])
   const [salesQuery, setSalesQuery] = useState('')
   const [salesDate, setSalesDate] = useState('')
@@ -300,10 +304,55 @@ export default function App() {
   async function loadSales() {
     if (!supabase || !session) return
     const { data, error } = await supabase.from('sales')
-      .select('id,invoice_no,subtotal,discount,total,payment_method,amount_received,change_amount,created_at,customers(id,full_name,phone),sale_items(id,product_no,product_name,sku,size,colour,quantity,unit_price,unit_cost,line_total)')
+      .select('id,invoice_no,customer_id,subtotal,discount,total,payment_method,amount_received,change_amount,created_at,customers(id,full_name,phone),sale_items(id,product_no,product_name,sku,size,colour,quantity,unit_price,unit_cost,line_total),customer_payments(id,payment_no,amount,payment_method,payment_date,reference_no)')
       .order('created_at', { ascending: false }).limit(500)
     if (error) setNotice(error.message)
     else if (data) setSales(data)
+  }
+
+  async function loadCustomerPayments() {
+    if (!supabase || !session) return
+    const { data, error } = await supabase.from('customer_payments')
+      .select('id,payment_no,customer_id,sale_id,amount,payment_method,payment_date,reference_no,notes,created_at,customers(full_name,phone),sales(invoice_no,total)')
+      .order('payment_date', { ascending: false }).limit(2000)
+    if (error) setNotice(error.message)
+    else if (data) setCustomerPayments(data)
+  }
+
+  function salePaidAmount(sale: any) {
+    return (sale.customer_payments || []).reduce((sum: number, payment: any) => sum + Number(payment.amount || 0), 0)
+  }
+
+  function saleOutstanding(sale: any) {
+    return Math.max(0, Number(sale.total || 0) - salePaidAmount(sale))
+  }
+
+  async function recordCustomerPayment(event: FormEvent) {
+    event.preventDefault()
+    const sale = sales.find(item => item.id === customerPaymentForm.sale_id)
+    const amount = Number(customerPaymentForm.amount)
+    if (!sale || sale.payment_method !== 'Credit') { setNotice('Select a valid credit invoice.'); return }
+    if (!Number.isFinite(amount) || amount <= 0 || Math.round(amount*100)!==amount*100) { setNotice('Enter a valid payment amount with up to two decimal places.'); return }
+    if (amount > saleOutstanding(sale)) { setNotice('Payment cannot exceed the outstanding invoice balance.'); return }
+    if (!customerPaymentForm.payment_date) { setNotice('Select a payment date.'); return }
+    setBusy(true)
+    if (supabase && session) {
+      const { data, error } = await supabase.rpc('record_customer_payment', {
+        p_sale_id: customerPaymentForm.sale_id,
+        p_amount: amount,
+        p_payment_method: customerPaymentForm.payment_method,
+        p_payment_date: customerPaymentForm.payment_date,
+        p_reference_no: customerPaymentForm.reference_no.trim() || null,
+        p_notes: customerPaymentForm.notes.trim() || null,
+      })
+      if (error) { setNotice(error.message); setBusy(false); return }
+      setNotice(`Customer payment ${data.payment_no} saved. Remaining balance: ${money(Number(data.outstanding))}.`)
+      setCustomerPaymentForm({ sale_id: '', amount: '', payment_method: 'Cash', payment_date: new Date().toISOString().slice(0,10), reference_no: '', notes: '' })
+      await Promise.all([loadSales(),loadCustomerPayments()])
+    } else {
+      setNotice('Customer payments require a connected Supabase account; demo mode cannot persist account balances.')
+    }
+    setBusy(false)
   }
 
   async function loadExpenses() {
@@ -505,7 +554,7 @@ export default function App() {
     setPosVariants(mapped)
   }
 
-  useEffect(() => { if (session) { void loadProducts(); void loadPOSVariants(); void loadCustomers(); void loadSales(); void loadReturns(); void loadSuppliers(); void loadPurchases(); void loadSupplierPayments(); void loadExpenses(); void loadEmployees() } else { setEmployees([]); setCurrentEmployeeRole(supabaseConfigured ? null : 'Admin'); setAttendanceRecords([]); setPayrollRuns([]); setPayrollAttendance([]) } }, [session])
+  useEffect(() => { if (session) { void loadProducts(); void loadPOSVariants(); void loadCustomers(); void loadSales(); void loadCustomerPayments(); void loadReturns(); void loadSuppliers(); void loadPurchases(); void loadSupplierPayments(); void loadExpenses(); void loadEmployees() } else { setEmployees([]); setCurrentEmployeeRole(supabaseConfigured ? null : 'Admin'); setAttendanceRecords([]); setPayrollRuns([]); setPayrollAttendance([]) } }, [session])
   useEffect(() => { if (session && employees.length) { void loadAttendance(); if (['Admin','Manager'].includes(currentEmployeeRole || '')) void loadPayrollRuns() } }, [session, employees.length, currentEmployeeRole])
   useEffect(() => { if (session && employees.length && ['Admin','Manager'].includes(currentEmployeeRole || '')) void loadPayrollAttendance() }, [session, employees.length, currentEmployeeRole, payrollStart, payrollEnd])
   useEffect(() => { if (activeProduct) void loadVariants(activeProduct.id) }, [activeProduct?.id, session])
@@ -549,26 +598,41 @@ export default function App() {
     event.preventDefault()
     if (!cart.length) { setNotice('Add at least one item to the cart.'); return }
     if (discountValue > cartSubtotal) { setNotice('Discount cannot exceed the subtotal.'); return }
-    const received = Number(amountReceived)
-    if (!Number.isFinite(received) || received < cartTotal) { setNotice('Amount received must be equal to or greater than the total.'); return }
-    if (paymentMethod !== 'Cash' && received !== cartTotal) { setNotice('For card or bank transfer, enter the exact sale total.'); return }
+    const received = Number(amountReceived || 0)
+    if (paymentMethod === 'Credit') {
+      if (!selectedCustomer) { setNotice('Select a registered customer for a credit sale.'); return }
+      if (!Number.isFinite(received) || received < 0 || received >= cartTotal) { setNotice('Enter an initial payment from zero up to less than the invoice total.'); return }
+    } else {
+      if (!Number.isFinite(received) || received < cartTotal) { setNotice('Amount received must be equal to or greater than the total.'); return }
+      if (paymentMethod !== 'Cash' && received !== cartTotal) { setNotice('For card or bank transfer, enter the exact sale total.'); return }
+    }
     setBusy(true)
     const invoiceItems = cart.map(line => ({ ...line }))
     if (supabase && session) {
-      const { data, error } = await supabase.rpc('complete_sale_for_customer', {
-        p_items: cart.map(line => ({ variant_id: line.variant_id, quantity: line.quantity })),
-        p_discount: discountValue,
-        p_payment_method: paymentMethod,
-        p_amount_received: received,
-        p_customer_id: selectedCustomer || null,
-      })
+      const { data, error } = paymentMethod === 'Credit'
+        ? await supabase.rpc('complete_credit_sale', {
+            p_items: cart.map(line => ({ variant_id: line.variant_id, quantity: line.quantity })),
+            p_discount: discountValue,
+            p_customer_id: selectedCustomer,
+            p_amount_received: received,
+            p_initial_payment_method: creditPaymentMethod,
+            p_payment_date: new Date().toISOString().slice(0,10),
+          })
+        : await supabase.rpc('complete_sale_for_customer', {
+            p_items: cart.map(line => ({ variant_id: line.variant_id, quantity: line.quantity })),
+            p_discount: discountValue,
+            p_payment_method: paymentMethod,
+            p_amount_received: received,
+            p_customer_id: selectedCustomer || null,
+          })
       if (error) { setNotice(error.message); setBusy(false); return }
       const result = data as any
       setLastInvoice({ invoice_no: result.invoice_no, subtotal: Number(result.subtotal), discount: Number(result.discount),
         total: Number(result.total), amount_received: Number(result.amount_received), change_amount: Number(result.change_amount),
         payment_method: result.payment_method, created_at: result.created_at, items: invoiceItems })
       await loadPOSVariants()
-      await loadSales()
+      await Promise.all([loadSales(),loadCustomerPayments()])
+      if (paymentMethod === 'Credit') setNotice(`Credit invoice ${result.invoice_no} created. Outstanding: ${money(Number(result.outstanding))}.`)
     } else {
       setPosVariants(current => current.map(v => {
         const sold = cart.find(line => line.variant_id === v.id)
@@ -577,11 +641,13 @@ export default function App() {
       const demoInvoiceNo = `DEMO-${Date.now()}`
       const demoCustomer = customers.find(c => c.id === selectedCustomer) || null
       const demoCreatedAt = new Date().toISOString()
+      const demoPayment = paymentMethod==='Credit' && received>0 ? { id: crypto.randomUUID(), payment_no: `CP-DEMO-${Date.now()}`, customer_id: demoCustomer?.id, sale_id: demoInvoiceNo, amount: received, payment_method: creditPaymentMethod, payment_date: localBusinessDate(), reference_no: null, customers: demoCustomer, sales: { invoice_no: demoInvoiceNo, total: cartTotal } } : null
       setLastInvoice({ invoice_no: demoInvoiceNo, subtotal: cartSubtotal, discount: discountValue, total: cartTotal,
-        amount_received: received, change_amount: received - cartTotal, payment_method: paymentMethod, created_at: demoCreatedAt, items: invoiceItems })
+        amount_received: received, change_amount: paymentMethod==='Credit'?0:received - cartTotal, payment_method: paymentMethod, created_at: demoCreatedAt, items: invoiceItems })
       setSales(current => [{ id: demoInvoiceNo, invoice_no: demoInvoiceNo, subtotal: cartSubtotal, discount: discountValue, total: cartTotal,
-        amount_received: received, change_amount: received - cartTotal, payment_method: paymentMethod, created_at: demoCreatedAt,
-        customers: demoCustomer, sale_items: invoiceItems.map((line,i) => ({ id: `${demoInvoiceNo}-${i}`, product_no: line.product_no, product_name: line.name, sku: line.sku, size: line.size, colour: line.colour, quantity: line.quantity, unit_price: line.unit_price, line_total: line.unit_price * line.quantity })) }, ...current])
+        amount_received: received, change_amount: paymentMethod==='Credit'?0:received - cartTotal, payment_method: paymentMethod, customer_id: demoCustomer?.id || null, created_at: demoCreatedAt,
+        customer_payments: demoPayment?[demoPayment]:[], customers: demoCustomer, sale_items: invoiceItems.map((line,i) => ({ id: `${demoInvoiceNo}-${i}`, product_no: line.product_no, product_name: line.name, sku: line.sku, size: line.size, colour: line.colour, quantity: line.quantity, unit_price: line.unit_price, line_total: line.unit_price * line.quantity })) }, ...current])
+      if (demoPayment) setCustomerPayments(current=>[demoPayment,...current])
       setNotice('Demo sale completed locally only. No data was saved to Supabase.')
     }
     setCart([]); setDiscount('0'); setAmountReceived(''); setSelectedCustomer(''); setBusy(false)
@@ -781,7 +847,7 @@ export default function App() {
   </form></div>
 
   return <div className="shell">
-    <aside><h2>◈ Clothing ERP</h2><small>RETAIL MANAGEMENT</small>{(supabaseConfigured && session ? (currentEmployeeRole === 'Admin' ? navigation : currentEmployeeRole === 'Manager' ? navigation.filter(item=>item!=='Settings') : currentEmployeeRole === 'Cashier' ? ['Overview','Point of Sale','Sales History','Customers','Attendance'] : currentEmployeeRole === 'Staff' ? ['Overview','Products & Stock','Attendance'] : ['Overview','Employees']) : navigation).map(item => <button key={item} className={page === item ? 'active' : ''} onClick={() => setPage(item)}>{item}</button>)}</aside>
+    <aside><h2>◈ Clothing ERP</h2><small>RETAIL MANAGEMENT</small>{(supabaseConfigured && session ? (currentEmployeeRole === 'Admin' ? navigation : currentEmployeeRole === 'Manager' ? navigation.filter(item=>item!=='Settings') : currentEmployeeRole === 'Cashier' ? ['Overview','Point of Sale','Sales History','Customers','Customer Accounts','Attendance'] : currentEmployeeRole === 'Staff' ? ['Overview','Products & Stock','Attendance'] : ['Overview','Employees']) : navigation).map(item => <button key={item} className={page === item ? 'active' : ''} onClick={() => setPage(item)}>{item}</button>)}</aside>
     <main><header><b>Workspace / {page}</b><div className="header-actions"><span className={supabaseConfigured ? 'ok' : 'demo'}>{supabaseConfigured ? 'Supabase connected' : 'Demo mode'}</span>{session && <button className="text-button" onClick={() => void signOut()}>Sign out</button>}</div></header>
       <section>
         {notice && <p className="notice">{notice}<button className="dismiss" onClick={() => setNotice('')}>×</button></p>}
@@ -970,6 +1036,38 @@ export default function App() {
             {supplierPayments.map(p=>{const supplier=Array.isArray(p.suppliers)?p.suppliers[0]:p.suppliers;const purchase=Array.isArray(p.purchase_orders)?p.purchase_orders[0]:p.purchase_orders;return <tr key={p.id}><td>{p.payment_date}</td><td><b>{p.payment_no}</b></td><td>{supplier?.name||'—'}</td><td>{purchase?.purchase_no||'—'}</td><td>{p.payment_method}</td><td>{p.reference_no||'—'}</td><td><b>{money(Number(p.amount))}</b></td></tr>})}
             {supplierPayments.length===0&&<tr><td colSpan={7}>No supplier payments recorded yet.</td></tr>}
           </tbody></table></div></article>
+        </> : page === 'Customer Accounts' ? <>
+          <div className="heading"><div><p className="eyebrow">ACCOUNTS RECEIVABLE</p><h1>Customer Credit Accounts</h1><p>Track credit invoices, partial collections and outstanding customer balances.</p></div><button onClick={()=>{void loadSales();void loadCustomerPayments();void loadCustomers()}}>Refresh accounts</button></div>
+          <div className="expense-summary customer-credit-summary">
+            <article><small>Total credit sales</small><h2>{money(sales.filter(s=>s.payment_method==='Credit').reduce((n,s)=>n+Number(s.total||0),0))}</h2></article>
+            <article><small>Total collected</small><h2>{money(customerPayments.reduce((n,p)=>n+Number(p.amount||0),0))}</h2></article>
+            <article><small>Outstanding receivables</small><h2>{money(sales.filter(s=>s.payment_method==='Credit').reduce((n,s)=>n+saleOutstanding(s),0))}</h2></article>
+          </div>
+          <article><div className="toolbar"><div><h3>Customer balances</h3><p className="muted">Credit invoices only. Payments are allocated to individual invoices.</p></div><input placeholder="Search customer name or phone…" value={customerAccountQuery} onChange={e=>setCustomerAccountQuery(e.target.value)}/></div>
+            <div className="tablewrap"><table><thead><tr><th>CUSTOMER</th><th>CREDIT INVOICES</th><th>TOTAL CREDIT</th><th>COLLECTED</th><th>OUTSTANDING</th></tr></thead><tbody>
+              {customers.filter(c=>`${c.full_name} ${c.phone||''}`.toLowerCase().includes(customerAccountQuery.toLowerCase())).map(c=>{const invoices=sales.filter(s=>s.payment_method==='Credit'&&s.customer_id===c.id);const total=invoices.reduce((n,s)=>n+Number(s.total||0),0);const paid=customerPayments.filter(p=>p.customer_id===c.id).reduce((n,p)=>n+Number(p.amount||0),0);return <tr key={c.id}><td><b>{c.full_name}</b><small>{c.phone||''}</small></td><td>{invoices.length}</td><td>{money(total)}</td><td>{money(paid)}</td><td><b>{money(Math.max(0,total-paid))}</b></td></tr>})}
+              {customers.length===0&&<tr><td colSpan={5}>No customers registered.</td></tr>}
+            </tbody></table></div>
+          </article>
+          <article className="customer-credit-payment"><h3>Receive customer payment</h3><p className="muted">Allocate each collection to a specific credit invoice. Overpayments are rejected.</p>
+            <form className="customer-credit-form" onSubmit={recordCustomerPayment}>
+              <label>Credit invoice<select required value={customerPaymentForm.sale_id} onChange={e=>setCustomerPaymentForm({...customerPaymentForm,sale_id:e.target.value,amount:''})}><option value="">Select unpaid invoice…</option>{sales.filter(s=>s.payment_method==='Credit'&&saleOutstanding(s)>0).map(s=>{const customer=Array.isArray(s.customers)?s.customers[0]:s.customers;return <option key={s.id} value={s.id}>{s.invoice_no} · {customer?.full_name||'Customer'} · Due {money(saleOutstanding(s))}</option>})}</select></label>
+              <label>Payment amount (LKR)<input required type="number" min="0.01" step="0.01" max={sales.find(s=>s.id===customerPaymentForm.sale_id)?saleOutstanding(sales.find(s=>s.id===customerPaymentForm.sale_id)):undefined} value={customerPaymentForm.amount} onChange={e=>setCustomerPaymentForm({...customerPaymentForm,amount:e.target.value})}/></label>
+              <label>Payment method<select value={customerPaymentForm.payment_method} onChange={e=>setCustomerPaymentForm({...customerPaymentForm,payment_method:e.target.value})}><option>Cash</option><option>Card</option><option>Bank Transfer</option><option>Cheque</option></select></label>
+              <label>Payment date<input required type="date" value={customerPaymentForm.payment_date} onChange={e=>setCustomerPaymentForm({...customerPaymentForm,payment_date:e.target.value})}/></label>
+              <label>Reference / Cheque No.<input value={customerPaymentForm.reference_no} onChange={e=>setCustomerPaymentForm({...customerPaymentForm,reference_no:e.target.value})}/></label>
+              <label>Notes<input value={customerPaymentForm.notes} onChange={e=>setCustomerPaymentForm({...customerPaymentForm,notes:e.target.value})}/></label>
+              <button className="primary" disabled={busy||!customerPaymentForm.sale_id}>{busy?'Saving…':'Receive payment'}</button>
+            </form>
+          </article>
+          <article><div className="toolbar"><h3>Open credit invoices</h3></div><div className="tablewrap"><table><thead><tr><th>DATE</th><th>INVOICE</th><th>CUSTOMER</th><th>TOTAL</th><th>PAID</th><th>OUTSTANDING</th><th>STATUS</th></tr></thead><tbody>
+            {sales.filter(s=>s.payment_method==='Credit').map(s=>{const customer=Array.isArray(s.customers)?s.customers[0]:s.customers;const balance=saleOutstanding(s);return <tr key={s.id}><td>{new Date(s.created_at).toLocaleDateString()}</td><td><b>{s.invoice_no}</b></td><td>{customer?.full_name||'—'}</td><td>{money(Number(s.total))}</td><td>{money(salePaidAmount(s))}</td><td>{money(balance)}</td><td><span className={balance===0?'stock-ok':'stock-low'}>{balance===0?'Paid':salePaidAmount(s)>0?'Part-paid':'Unpaid'}</span></td></tr>})}
+            {sales.filter(s=>s.payment_method==='Credit').length===0&&<tr><td colSpan={7}>No credit invoices recorded.</td></tr>}
+          </tbody></table></div></article>
+          <article><div className="toolbar"><h3>Customer payment history ({customerPayments.length})</h3></div><div className="tablewrap"><table><thead><tr><th>DATE</th><th>PAYMENT NO.</th><th>CUSTOMER</th><th>INVOICE</th><th>METHOD</th><th>REFERENCE</th><th>AMOUNT</th></tr></thead><tbody>
+            {customerPayments.map(p=>{const customer=Array.isArray(p.customers)?p.customers[0]:p.customers;const sale=Array.isArray(p.sales)?p.sales[0]:p.sales;return <tr key={p.id}><td>{p.payment_date}</td><td><b>{p.payment_no}</b></td><td>{customer?.full_name||'—'}</td><td>{sale?.invoice_no||'—'}</td><td>{p.payment_method}</td><td>{p.reference_no||'—'}</td><td><b>{money(Number(p.amount))}</b></td></tr>})}
+            {customerPayments.length===0&&<tr><td colSpan={7}>No customer payments recorded yet.</td></tr>}
+          </tbody></table></div></article>
         </> : page === 'Suppliers' ? <>
           <div className="heading"><div><p className="eyebrow">VENDOR DIRECTORY</p><h1>Suppliers</h1><p>Maintain supplier contact details for purchase receiving.</p></div></div>
           <div className="customer-layout"><article><h3>Add supplier</h3><form onSubmit={saveSupplier} className="customer-form">
@@ -1024,10 +1122,10 @@ export default function App() {
               <div className="cart-lines">{cart.map(line => <div className="cart-line" key={line.variant_id}><div><b>{line.name}</b><small>{line.product_no} · {line.size} / {line.colour}</small><small>{money(line.unit_price)} each</small></div><div className="qty-control"><button type="button" onClick={() => updateCartQuantity(line.variant_id,line.quantity-1)}>−</button><span>{line.quantity}</span><button type="button" onClick={() => updateCartQuantity(line.variant_id,line.quantity+1)}>+</button></div><b>{money(line.unit_price*line.quantity)}</b></div>)}
                 {cart.length === 0 && <p className="muted">Your cart is empty. Add products to begin.</p>}</div>
               <div className="bill-summary"><div><span>Subtotal</span><b>{money(cartSubtotal)}</b></div><label>Discount (LKR)<input type="number" min="0" step="0.01" value={discount} onChange={e => setDiscount(e.target.value)} /></label><div className="grand-total"><span>Total</span><strong>{money(cartTotal)}</strong></div></div>
-              <form onSubmit={completeSale} className="checkout-form"><label>Customer<select value={selectedCustomer} onChange={e => setSelectedCustomer(e.target.value)}><option value="">Walk-in customer</option>{customers.map(c => <option key={c.id} value={c.id}>{c.full_name}{c.phone ? ` · ${c.phone}` : ''}</option>)}</select></label><label>Payment method<select value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)}><option>Cash</option><option>Card</option><option>Bank Transfer</option></select></label><label>Amount received (LKR)<input required type="number" min={cartTotal} step="0.01" value={amountReceived} onChange={e => setAmountReceived(e.target.value)} placeholder={String(cartTotal)} /></label><p className="change-due">Change: <b>{money(Math.max(0,(Number(amountReceived)||0)-cartTotal))}</b></p><button className="primary full" disabled={busy || cart.length===0}>{busy ? 'Processing…' : 'Complete Sale'}</button></form>
+              <form onSubmit={completeSale} className="checkout-form"><label>Customer<select value={selectedCustomer} onChange={e => setSelectedCustomer(e.target.value)}><option value="">Walk-in customer</option>{customers.map(c => <option key={c.id} value={c.id}>{c.full_name}{c.phone ? ` · ${c.phone}` : ''}</option>)}</select></label><label>Payment method<select value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)}><option>Cash</option><option>Card</option><option>Bank Transfer</option><option>Credit</option></select></label>{paymentMethod==='Credit' && <label>Initial payment method<select value={creditPaymentMethod} onChange={e=>setCreditPaymentMethod(e.target.value)}><option>Cash</option><option>Card</option><option>Bank Transfer</option><option>Cheque</option></select></label>}<label>Amount received (LKR)<input required type="number" min={paymentMethod==='Credit'?0:cartTotal} max={paymentMethod==='Credit'?Math.max(0,cartTotal-0.01):undefined} step="0.01" value={amountReceived} onChange={e => setAmountReceived(e.target.value)} placeholder={paymentMethod==='Credit'?'0':String(cartTotal)} /></label>{paymentMethod==='Credit' ? <p className="change-due">Outstanding: <b>{money(Math.max(0,cartTotal-(Number(amountReceived)||0)))}</b></p> : <p className="change-due">Change: <b>{money(Math.max(0,(Number(amountReceived)||0)-cartTotal))}</b></p>}<button className="primary full" disabled={busy || cart.length===0}>{busy ? 'Processing…' : 'Complete Sale'}</button></form>
             </article>
           </div>
-          {lastInvoice && <div className="invoice-preview"><div className="heading"><div><p className="eyebrow">SALE COMPLETED</p><h2>Invoice {lastInvoice.invoice_no}</h2></div><button className="primary" onClick={() => window.print()}>Print invoice</button></div><p>{new Date(lastInvoice.created_at).toLocaleString()}</p><div className="tablewrap"><table><thead><tr><th>ITEM</th><th>SIZE / COLOUR</th><th>QTY</th><th>PRICE</th><th>AMOUNT</th></tr></thead><tbody>{lastInvoice.items.map((line,i)=><tr key={i}><td>{line.name}<small>{line.product_no}</small></td><td>{line.size} / {line.colour}</td><td>{line.quantity}</td><td>{money(line.unit_price)}</td><td>{money(line.unit_price*line.quantity)}</td></tr>)}</tbody></table></div><p>Subtotal: {money(lastInvoice.subtotal)} · Discount: {money(lastInvoice.discount)} · <b>Total: {money(lastInvoice.total)}</b></p><p>Paid by {lastInvoice.payment_method} · Received {money(lastInvoice.amount_received)} · Change {money(lastInvoice.change_amount)}</p></div>}
+          {lastInvoice && <div className="invoice-preview"><div className="heading"><div><p className="eyebrow">SALE COMPLETED</p><h2>Invoice {lastInvoice.invoice_no}</h2></div><button className="primary" onClick={() => window.print()}>Print invoice</button></div><p>{new Date(lastInvoice.created_at).toLocaleString()}</p><div className="tablewrap"><table><thead><tr><th>ITEM</th><th>SIZE / COLOUR</th><th>QTY</th><th>PRICE</th><th>AMOUNT</th></tr></thead><tbody>{lastInvoice.items.map((line,i)=><tr key={i}><td>{line.name}<small>{line.product_no}</small></td><td>{line.size} / {line.colour}</td><td>{line.quantity}</td><td>{money(line.unit_price)}</td><td>{money(line.unit_price*line.quantity)}</td></tr>)}</tbody></table></div><p>Subtotal: {money(lastInvoice.subtotal)} · Discount: {money(lastInvoice.discount)} · <b>Total: {money(lastInvoice.total)}</b></p><p>{lastInvoice.payment_method==='Credit' ? <>Credit sale · Initial payment {money(lastInvoice.amount_received)} · <b>Outstanding {money(lastInvoice.total-lastInvoice.amount_received)}</b></> : <>Paid by {lastInvoice.payment_method} · Received {money(lastInvoice.amount_received)} · Change {money(lastInvoice.change_amount)}</>}</p></div>}
         </> : page === 'Customers' ? <>
           <div className="heading"><div><p className="eyebrow">CUSTOMER DIRECTORY</p><h1>Customers</h1><p>Save customer contact details and see their purchase totals.</p></div></div>
           <div className="customer-layout">
