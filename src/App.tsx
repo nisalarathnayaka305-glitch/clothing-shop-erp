@@ -15,7 +15,7 @@ type POSVariant = ProductVariant & { product_no: string; product_name: string; s
 type CartLine = { variant_id: string; product_no: string; name: string; sku: string; size: string; colour: string; unit_price: number; quantity: number; available: number }
 type Invoice = { invoice_no: string; subtotal: number; discount: number; total: number; amount_received: number; change_amount: number; payment_method: string; created_at: string; items: CartLine[] }
 
-const navigation = ['Overview', 'Point of Sale', 'Sales History', 'Products & Stock', 'Purchases', 'Customers', 'Suppliers', 'Expenses', 'Reports', 'Employees', 'Settings']
+const navigation = ['Overview', 'Point of Sale', 'Sales History', 'Returns & Exchanges', 'Products & Stock', 'Purchases', 'Customers', 'Suppliers', 'Expenses', 'Reports', 'Employees', 'Settings']
 
 export default function App() {
   const [products, setProducts] = useState<Product[]>(demo)
@@ -49,6 +49,12 @@ export default function App() {
   const [salesQuery, setSalesQuery] = useState('')
   const [salesDate, setSalesDate] = useState('')
   const [selectedSale, setSelectedSale] = useState<any | null>(null)
+  const [returnSale, setReturnSale] = useState<any | null>(null)
+  const [returnLines, setReturnLines] = useState<Record<string, string>>({})
+  const [returnReason, setReturnReason] = useState('Customer changed mind')
+  const [restockReturned, setRestockReturned] = useState(true)
+  const [refundMethod, setRefundMethod] = useState('Cash')
+  const [returns, setReturns] = useState<any[]>([])
 
   useEffect(() => {
     if (!supabase) return
@@ -105,6 +111,45 @@ export default function App() {
     else if (data) setSales(data)
   }
 
+  async function loadReturns() {
+    if (!supabase || !session) return
+    const { data, error } = await supabase.from('sales_returns')
+      .select('id,return_no,sale_id,refund_total,refund_method,reason,restock_items,created_at,sales(invoice_no),sales_return_items(id,product_no,product_name,size,colour,quantity,unit_price,line_total)')
+      .order('created_at', { ascending: false }).limit(500)
+    if (error) setNotice(error.message)
+    else if (data) setReturns(data)
+  }
+
+  async function processReturn(event: FormEvent) {
+    event.preventDefault()
+    if (!returnSale) { setNotice('Select the original invoice first.'); return }
+    const items = Object.entries(returnLines).filter(([,qty]) => Number(qty) > 0).map(([sale_item_id,qty]) => ({ sale_item_id, quantity: Number(qty) }))
+    if (!items.length || items.some(item => !Number.isInteger(item.quantity))) { setNotice('Enter a whole-number return quantity for at least one item.'); return }
+    if (!returnReason.trim()) { setNotice('Enter a reason for the return.'); return }
+    setBusy(true)
+    if (supabase && session) {
+      const { data, error } = await supabase.rpc('process_sales_return', {
+        p_sale_id: returnSale.id, p_items: items, p_reason: returnReason.trim(),
+        p_restock_items: restockReturned, p_refund_method: refundMethod,
+      })
+      if (error) { setNotice(error.message); setBusy(false); return }
+      setNotice(`Return ${data.return_no} processed. Refund: ${money(Number(data.refund_total))}.`)
+      await Promise.all([loadReturns(), loadPOSVariants(), loadSales()])
+    } else {
+      const refund = items.reduce((sum,item) => {
+        const line = returnSale.sale_items.find((x:any) => x.id === item.sale_item_id)
+        return sum + Number(line.unit_price) * item.quantity
+      },0)
+      const demoReturn = { id: crypto.randomUUID(), return_no: `RET-DEMO-${Date.now()}`, sale_id: returnSale.id,
+        sales: { invoice_no: returnSale.invoice_no }, refund_total: refund, refund_method: refundMethod,
+        reason: returnReason, restock_items: restockReturned, created_at: new Date().toISOString(),
+        sales_return_items: items.map(item => { const line = returnSale.sale_items.find((x:any) => x.id === item.sale_item_id); return { ...line, quantity: item.quantity, line_total: item.quantity * Number(line.unit_price) } }) }
+      setReturns(current => [demoReturn,...current])
+      setNotice('Demo return recorded locally only. No Supabase data or stock was changed.')
+    }
+    setReturnSale(null); setReturnLines({}); setReturnReason('Customer changed mind'); setRestockReturned(true); setBusy(false)
+  }
+
   async function loadPOSVariants() {
     if (!supabase || !session) return
     const { data, error } = await supabase.from('product_variants')
@@ -122,7 +167,7 @@ export default function App() {
     setPosVariants(mapped)
   }
 
-  useEffect(() => { if (session) { void loadProducts(); void loadPOSVariants(); void loadCustomers(); void loadSales() } }, [session])
+  useEffect(() => { if (session) { void loadProducts(); void loadPOSVariants(); void loadCustomers(); void loadSales(); void loadReturns() } }, [session])
   useEffect(() => { if (activeProduct) void loadVariants(activeProduct.id) }, [activeProduct?.id, session])
 
   function addToCart(variant: POSVariant) {
@@ -336,6 +381,26 @@ export default function App() {
             </tbody></table></div>
           </article>
           {selectedSale && <div className="invoice-preview"><div className="heading"><div><p className="eyebrow">INVOICE DETAILS</p><h2>{selectedSale.invoice_no}</h2></div><button onClick={() => setSelectedSale(null)}>Close</button><button className="primary" onClick={() => window.print()}>Print</button></div><p>{new Date(selectedSale.created_at).toLocaleString()} · {selectedSale.payment_method}</p><div className="tablewrap"><table><thead><tr><th>PRODUCT</th><th>SIZE / COLOUR</th><th>QTY</th><th>UNIT PRICE</th><th>LINE TOTAL</th></tr></thead><tbody>{(selectedSale.sale_items || []).map((i:any)=><tr key={i.id}><td>{i.product_name}<small>{i.product_no} · {i.sku}</small></td><td>{i.size} / {i.colour}</td><td>{i.quantity}</td><td>{money(Number(i.unit_price))}</td><td>{money(Number(i.line_total))}</td></tr>)}</tbody></table></div><p>Subtotal: {money(Number(selectedSale.subtotal))} · Discount: {money(Number(selectedSale.discount))} · <b>Total: {money(Number(selectedSale.total))}</b></p><p>Received: {money(Number(selectedSale.amount_received))} · Change: {money(Number(selectedSale.change_amount))}</p></div>}
+        </> : page === 'Returns & Exchanges' ? <>
+          <div className="heading"><div><p className="eyebrow">AFTER-SALES</p><h1>Returns & Exchanges</h1><p>Process item returns against an original invoice and record refunds.</p></div><button onClick={() => { void loadSales(); void loadReturns() }}>Refresh</button></div>
+          <article className="return-workflow">
+            <h3>Process a return</h3>
+            <form onSubmit={processReturn}>
+              <label>Original invoice<select value={returnSale?.id || ''} onChange={e => { const sale = sales.find(s => s.id === e.target.value) || null; setReturnSale(sale); setReturnLines({}) }}><option value="">Select invoice…</option>{sales.map(s => <option key={s.id} value={s.id}>{s.invoice_no} · {new Date(s.created_at).toLocaleDateString()} · {money(Number(s.total))}</option>)}</select></label>
+              {returnSale && <div className="tablewrap"><table><thead><tr><th>PRODUCT</th><th>SIZE / COLOUR</th><th>SOLD QTY</th><th>UNIT PRICE</th><th>RETURN QTY</th></tr></thead><tbody>
+                {(returnSale.sale_items || []).map((line:any) => <tr key={line.id}><td>{line.product_name}<small>{line.product_no}</small></td><td>{line.size} / {line.colour}</td><td>{line.quantity}</td><td>{money(Number(line.unit_price))}</td><td><input className="return-qty" aria-label={`Return quantity for ${line.product_name}`} type="number" min="0" max={line.quantity} step="1" value={returnLines[line.id] || '0'} onChange={e => setReturnLines(current => ({ ...current, [line.id]: e.target.value }))} /></td></tr>)}
+              </tbody></table></div>}
+              <div className="return-options"><label>Reason<select value={returnReason} onChange={e => setReturnReason(e.target.value)}><option>Customer changed mind</option><option>Wrong size</option><option>Wrong colour</option><option>Defective item</option><option>Incorrect item supplied</option><option>Other</option></select></label>
+                <label>Refund method<select value={refundMethod} onChange={e => setRefundMethod(e.target.value)}><option>Cash</option><option>Card</option><option>Bank Transfer</option><option>Store Credit</option></select></label>
+                <label className="check-label"><input type="checkbox" checked={restockReturned} onChange={e => setRestockReturned(e.target.checked)} /> Returned items are resalable and should be added back to stock</label>
+              </div>
+              <button className="primary" disabled={busy || !returnSale}>{busy ? 'Processing…' : 'Process Return & Refund'}</button>
+            </form>
+          </article>
+          <article><div className="toolbar"><h3>Return history ({returns.length})</h3></div><div className="tablewrap"><table><thead><tr><th>DATE</th><th>RETURN NO.</th><th>ORIGINAL INVOICE</th><th>ITEMS</th><th>REFUND</th><th>METHOD</th><th>RESTOCKED</th></tr></thead><tbody>
+            {returns.map(r => { const original = Array.isArray(r.sales) ? r.sales[0] : r.sales; return <tr key={r.id}><td>{new Date(r.created_at).toLocaleString()}</td><td><b>{r.return_no}</b></td><td>{original?.invoice_no || '—'}</td><td>{(r.sales_return_items || []).reduce((n:number,i:any)=>n+i.quantity,0)}</td><td>{money(Number(r.refund_total))}</td><td>{r.refund_method}</td><td>{r.restock_items ? 'Yes' : 'No'}</td></tr> })}
+            {returns.length === 0 && <tr><td colSpan={7}>No returns recorded yet.</td></tr>}
+          </tbody></table></div></article>
         </> : page === 'Products & Stock' ? <>
           <div className="heading"><div><p className="eyebrow">CATALOGUE & INVENTORY</p><h1>Products & Stock</h1><p>Manage products, size/colour variants and stock quantities.</p></div><button className="primary" onClick={() => setShow(true)}>+ Add Product</button></div>
           <article><div className="toolbar"><h3>Product catalogue ({products.length})</h3><input aria-label="Search products" placeholder="Search product no, name or SKU…" value={query} onChange={e => setQuery(e.target.value)} /><button onClick={() => void loadProducts()}>Refresh</button></div>
