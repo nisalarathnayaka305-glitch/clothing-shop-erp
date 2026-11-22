@@ -15,7 +15,7 @@ type POSVariant = ProductVariant & { product_no: string; product_name: string; s
 type CartLine = { variant_id: string; product_no: string; name: string; sku: string; size: string; colour: string; unit_price: number; quantity: number; available: number }
 type Invoice = { invoice_no: string; subtotal: number; discount: number; total: number; amount_received: number; change_amount: number; payment_method: string; created_at: string; items: CartLine[] }
 
-const navigation = ['Overview', 'Point of Sale', 'Sales History', 'Returns & Exchanges', 'Products & Stock', 'Purchases', 'Customers', 'Suppliers', 'Expenses', 'Reports', 'Employees', 'Attendance', 'Payroll', 'Settings']
+const navigation = ['Overview', 'Point of Sale', 'Sales History', 'Returns & Exchanges', 'Products & Stock', 'Purchases', 'Customers', 'Suppliers', 'Supplier Accounts', 'Expenses', 'Reports', 'Employees', 'Attendance', 'Payroll', 'Settings']
 const localBusinessDate = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Colombo' }).format(new Date())
 
 export default function App() {
@@ -60,6 +60,10 @@ export default function App() {
   const [supplierForm, setSupplierForm] = useState({ name: '', phone: '', email: '' })
   const [supplierQuery, setSupplierQuery] = useState('')
   const [purchaseHistory, setPurchaseHistory] = useState<any[]>([])
+  const [supplierPayments, setSupplierPayments] = useState<any[]>([])
+  const [supplierPaymentForm, setSupplierPaymentForm] = useState({ purchase_id: '', amount: '', payment_method: 'Cash', payment_date: new Date().toISOString().slice(0,10), reference_no: '', notes: '' })
+  const [supplierAccountQuery, setSupplierAccountQuery] = useState('')
+
   const [purchaseSupplier, setPurchaseSupplier] = useState('')
   const [purchaseLines, setPurchaseLines] = useState<Record<string, { quantity: string; unit_cost: string }>>({})
   const [purchaseReference, setPurchaseReference] = useState('')
@@ -352,10 +356,55 @@ export default function App() {
   async function loadPurchases() {
     if (!supabase || !session) return
     const { data, error } = await supabase.from('purchase_orders')
-      .select('id,purchase_no,supplier_reference,total,created_at,suppliers(name),purchase_items(id,product_no,product_name,size,colour,quantity,unit_cost,line_total)')
-      .order('created_at', { ascending: false }).limit(500)
+      .select('id,purchase_no,supplier_id,supplier_reference,purchase_date,total,created_at,suppliers(id,name),purchase_items(id,product_no,product_name,size,colour,quantity,unit_cost,line_total),supplier_payments(id,amount,payment_date,payment_no)')
+      .order('purchase_date', { ascending: false }).limit(1000)
     if (error) setNotice(error.message)
     else if (data) setPurchaseHistory(data)
+  }
+
+  async function loadSupplierPayments() {
+    if (!supabase || !session) return
+    const { data, error } = await supabase.from('supplier_payments')
+      .select('id,payment_no,supplier_id,purchase_id,amount,payment_method,payment_date,reference_no,notes,created_at,suppliers(name),purchase_orders(purchase_no)')
+      .order('payment_date', { ascending: false }).limit(2000)
+    if (error) setNotice(error.message)
+    else if (data) setSupplierPayments(data)
+  }
+
+  function purchasePaidAmount(purchase: any) {
+    return (purchase.supplier_payments || []).reduce((sum: number, payment: any) => sum + Number(payment.amount || 0), 0)
+  }
+
+  function purchaseOutstanding(purchase: any) {
+    return Math.max(0, Number(purchase.total || 0) - purchasePaidAmount(purchase))
+  }
+
+  async function recordSupplierPayment(event: FormEvent) {
+    event.preventDefault()
+    const amount = Number(supplierPaymentForm.amount)
+    const purchase = purchaseHistory.find(p => p.id === supplierPaymentForm.purchase_id)
+    if (!purchase) { setNotice('Select a purchase invoice.'); return }
+    if (!Number.isFinite(amount) || amount <= 0 || Math.round(amount*100)!==amount*100) { setNotice('Enter a valid payment amount with up to two decimal places.'); return }
+    if (amount > purchaseOutstanding(purchase)) { setNotice('Payment cannot exceed the invoice outstanding balance.'); return }
+    if (!supplierPaymentForm.payment_date) { setNotice('Select a payment date.'); return }
+    setBusy(true)
+    if (supabase && session) {
+      const { data, error } = await supabase.rpc('record_supplier_payment', {
+        p_purchase_id: supplierPaymentForm.purchase_id,
+        p_amount: amount,
+        p_payment_method: supplierPaymentForm.payment_method,
+        p_payment_date: supplierPaymentForm.payment_date,
+        p_reference_no: supplierPaymentForm.reference_no.trim() || null,
+        p_notes: supplierPaymentForm.notes.trim() || null,
+      })
+      if (error) { setNotice(error.message); setBusy(false); return }
+      setNotice(`Supplier payment ${data.payment_no} saved. Remaining invoice balance: ${money(Number(data.outstanding))}.`)
+      setSupplierPaymentForm({ purchase_id: '', amount: '', payment_method: 'Cash', payment_date: new Date().toISOString().slice(0,10), reference_no: '', notes: '' })
+      await Promise.all([loadPurchases(),loadSupplierPayments(),loadExpenses()])
+    } else {
+      setNotice('Supplier payments require a connected Supabase account; demo mode cannot persist account balances.')
+    }
+    setBusy(false)
   }
 
   async function saveSupplier(event: FormEvent) {
@@ -455,7 +504,7 @@ export default function App() {
     setPosVariants(mapped)
   }
 
-  useEffect(() => { if (session) { void loadProducts(); void loadPOSVariants(); void loadCustomers(); void loadSales(); void loadReturns(); void loadSuppliers(); void loadPurchases(); void loadExpenses(); void loadEmployees() } else { setEmployees([]); setCurrentEmployeeRole(supabaseConfigured ? null : 'Admin'); setAttendanceRecords([]); setPayrollRuns([]); setPayrollAttendance([]) } }, [session])
+  useEffect(() => { if (session) { void loadProducts(); void loadPOSVariants(); void loadCustomers(); void loadSales(); void loadReturns(); void loadSuppliers(); void loadPurchases(); void loadSupplierPayments(); void loadExpenses(); void loadEmployees() } else { setEmployees([]); setCurrentEmployeeRole(supabaseConfigured ? null : 'Admin'); setAttendanceRecords([]); setPayrollRuns([]); setPayrollAttendance([]) } }, [session])
   useEffect(() => { if (session && employees.length) { void loadAttendance(); if (['Admin','Manager'].includes(currentEmployeeRole || '')) void loadPayrollRuns() } }, [session, employees.length, currentEmployeeRole])
   useEffect(() => { if (session && employees.length && ['Admin','Manager'].includes(currentEmployeeRole || '')) void loadPayrollAttendance() }, [session, employees.length, currentEmployeeRole, payrollStart, payrollEnd])
   useEffect(() => { if (activeProduct) void loadVariants(activeProduct.id) }, [activeProduct?.id, session])
@@ -888,9 +937,37 @@ export default function App() {
               {posVariants.length===0 && <tr><td colSpan={5}>Create products and size/colour variants before receiving stock.</td></tr>}
             </tbody></table></div><button className="primary" disabled={busy || posVariants.length===0}>{busy?'Saving…':'Confirm Purchase & Add Stock'}</button>
           </form></article>
-          <article><div className="toolbar"><h3>Purchase history ({purchaseHistory.length})</h3></div><div className="tablewrap"><table><thead><tr><th>DATE</th><th>PURCHASE NO.</th><th>SUPPLIER</th><th>SUPPLIER REF.</th><th>ITEM TYPES</th><th>TOTAL COST</th></tr></thead><tbody>
-            {purchaseHistory.map(p=>{const supplier=Array.isArray(p.suppliers)?p.suppliers[0]:p.suppliers;return <tr key={p.id}><td>{new Date(p.created_at).toLocaleDateString()}</td><td><b>{p.purchase_no}</b></td><td>{supplier?.name || '—'}</td><td>{p.supplier_reference || '—'}</td><td>{p.purchase_items?.length || 0}</td><td>{money(Number(p.total))}</td></tr>})}
-            {purchaseHistory.length===0&&<tr><td colSpan={6}>No purchases recorded yet.</td></tr>}
+          <article><div className="toolbar"><h3>Purchase history ({purchaseHistory.length})</h3></div><div className="tablewrap"><table><thead><tr><th>DATE</th><th>PURCHASE NO.</th><th>SUPPLIER</th><th>SUPPLIER REF.</th><th>ITEM TYPES</th><th>TOTAL COST</th><th>PAID</th><th>OUTSTANDING</th><th>STATUS</th></tr></thead><tbody>
+            {purchaseHistory.map(p=>{const supplier=Array.isArray(p.suppliers)?p.suppliers[0]:p.suppliers;return <tr key={p.id}><td>{new Date(p.created_at).toLocaleDateString()}</td><td><b>{p.purchase_no}</b></td><td>{supplier?.name || '—'}</td><td>{p.supplier_reference || '—'}</td><td>{p.purchase_items?.length || 0}</td><td>{money(Number(p.total))}</td><td>{money(purchasePaidAmount(p))}</td><td>{money(purchaseOutstanding(p))}</td><td><span className={purchaseOutstanding(p)===0?'stock-ok':'stock-low'}>{purchaseOutstanding(p)===0?'Paid':purchasePaidAmount(p)>0?'Part-paid':'Unpaid'}</span></td></tr>})}
+            {purchaseHistory.length===0&&<tr><td colSpan={9}>No purchases recorded yet.</td></tr>}
+          </tbody></table></div></article>
+        </> : page === 'Supplier Accounts' ? <>
+          <div className="heading"><div><p className="eyebrow">ACCOUNTS PAYABLE</p><h1>Supplier Accounts</h1><p>Track supplier invoices, part-payments and outstanding balances.</p></div><button onClick={()=>{void loadPurchases();void loadSupplierPayments();void loadSuppliers()}}>Refresh accounts</button></div>
+          <div className="expense-summary supplier-summary">
+            <article><small>Total purchases</small><h2>{money(purchaseHistory.reduce((n,p)=>n+Number(p.total||0),0))}</h2></article>
+            <article><small>Total paid to suppliers</small><h2>{money(supplierPayments.reduce((n,p)=>n+Number(p.amount||0),0))}</h2></article>
+            <article><small>Outstanding payable</small><h2>{money(purchaseHistory.reduce((n,p)=>n+purchaseOutstanding(p),0))}</h2></article>
+          </div>
+          <article><div className="toolbar"><div><h3>Supplier balances</h3><p className="muted">Totals are based on received purchase invoices and recorded supplier payments.</p></div><input placeholder="Search supplier…" value={supplierAccountQuery} onChange={e=>setSupplierAccountQuery(e.target.value)}/></div>
+            <div className="tablewrap"><table><thead><tr><th>SUPPLIER</th><th>INVOICES</th><th>TOTAL PURCHASED</th><th>TOTAL PAID</th><th>OUTSTANDING</th></tr></thead><tbody>
+              {suppliers.filter(s=>s.name.toLowerCase().includes(supplierAccountQuery.toLowerCase())).map(s=>{const purchases=purchaseHistory.filter(p=>p.supplier_id===s.id);const total=purchases.reduce((n,p)=>n+Number(p.total||0),0);const paid=supplierPayments.filter(p=>p.supplier_id===s.id).reduce((n,p)=>n+Number(p.amount||0),0);return <tr key={s.id}><td><b>{s.name}</b><small>{s.phone||''}</small></td><td>{purchases.length}</td><td>{money(total)}</td><td>{money(paid)}</td><td><b>{money(Math.max(0,total-paid))}</b></td></tr>})}
+              {suppliers.length===0&&<tr><td colSpan={5}>No suppliers registered.</td></tr>}
+            </tbody></table></div>
+          </article>
+          <article className="supplier-payment-entry"><h3>Record supplier payment</h3><p className="muted">Payments are allocated to a specific purchase invoice. The system blocks overpayments and automatically records the transaction in Expenses.</p>
+            <form className="supplier-payment-form" onSubmit={recordSupplierPayment}>
+              <label>Purchase invoice<select required value={supplierPaymentForm.purchase_id} onChange={e=>setSupplierPaymentForm({...supplierPaymentForm,purchase_id:e.target.value,amount:''})}><option value="">Select unpaid invoice…</option>{purchaseHistory.filter(p=>purchaseOutstanding(p)>0).map(p=>{const supplier=Array.isArray(p.suppliers)?p.suppliers[0]:p.suppliers;return <option key={p.id} value={p.id}>{p.purchase_no} · {supplier?.name||'Supplier'} · Due {money(purchaseOutstanding(p))}</option>})}</select></label>
+              <label>Payment amount (LKR)<input required type="number" min="0.01" step="0.01" max={purchaseHistory.find(p=>p.id===supplierPaymentForm.purchase_id)?purchaseOutstanding(purchaseHistory.find(p=>p.id===supplierPaymentForm.purchase_id)):undefined} value={supplierPaymentForm.amount} onChange={e=>setSupplierPaymentForm({...supplierPaymentForm,amount:e.target.value})}/></label>
+              <label>Payment method<select value={supplierPaymentForm.payment_method} onChange={e=>setSupplierPaymentForm({...supplierPaymentForm,payment_method:e.target.value})}><option>Cash</option><option>Card</option><option>Bank Transfer</option><option>Cheque</option></select></label>
+              <label>Payment date<input required type="date" value={supplierPaymentForm.payment_date} onChange={e=>setSupplierPaymentForm({...supplierPaymentForm,payment_date:e.target.value})}/></label>
+              <label>Reference / Cheque No.<input value={supplierPaymentForm.reference_no} onChange={e=>setSupplierPaymentForm({...supplierPaymentForm,reference_no:e.target.value})}/></label>
+              <label>Notes<input value={supplierPaymentForm.notes} onChange={e=>setSupplierPaymentForm({...supplierPaymentForm,notes:e.target.value})}/></label>
+              <button className="primary" disabled={busy||!supplierPaymentForm.purchase_id}>{busy?'Saving…':'Record payment'}</button>
+            </form>
+          </article>
+          <article><div className="toolbar"><h3>Supplier payment history ({supplierPayments.length})</h3></div><div className="tablewrap"><table><thead><tr><th>DATE</th><th>PAYMENT NO.</th><th>SUPPLIER</th><th>PURCHASE NO.</th><th>METHOD</th><th>REFERENCE</th><th>AMOUNT</th></tr></thead><tbody>
+            {supplierPayments.map(p=>{const supplier=Array.isArray(p.suppliers)?p.suppliers[0]:p.suppliers;const purchase=Array.isArray(p.purchase_orders)?p.purchase_orders[0]:p.purchase_orders;return <tr key={p.id}><td>{p.payment_date}</td><td><b>{p.payment_no}</b></td><td>{supplier?.name||'—'}</td><td>{purchase?.purchase_no||'—'}</td><td>{p.payment_method}</td><td>{p.reference_no||'—'}</td><td><b>{money(Number(p.amount))}</b></td></tr>})}
+            {supplierPayments.length===0&&<tr><td colSpan={7}>No supplier payments recorded yet.</td></tr>}
           </tbody></table></div></article>
         </> : page === 'Suppliers' ? <>
           <div className="heading"><div><p className="eyebrow">VENDOR DIRECTORY</p><h1>Suppliers</h1><p>Maintain supplier contact details for purchase receiving.</p></div></div>
@@ -900,9 +977,9 @@ export default function App() {
             <label>Email address<input type="email" value={supplierForm.email} onChange={e=>setSupplierForm({...supplierForm,email:e.target.value})}/></label>
             <button className="primary" disabled={busy}>{busy?'Saving…':'Save supplier'}</button>
           </form></article><article><div className="toolbar"><h3>Supplier list ({suppliers.length})</h3><input placeholder="Search supplier / phone / email…" value={supplierQuery} onChange={e=>setSupplierQuery(e.target.value)}/><button onClick={()=>void loadSuppliers()}>Refresh</button></div>
-            <div className="tablewrap"><table><thead><tr><th>SUPPLIER</th><th>PHONE</th><th>EMAIL</th><th>PURCHASES</th><th>TOTAL PURCHASED</th></tr></thead><tbody>
-              {suppliers.filter(s=>`${s.name} ${s.phone||''} ${s.email||''}`.toLowerCase().includes(supplierQuery.toLowerCase())).map(s=>{const ps=purchaseHistory.filter(p=>{const linked=Array.isArray(p.suppliers)?p.suppliers[0]:p.suppliers;return linked?.id===s.id});return <tr key={s.id}><td><b>{s.name}</b></td><td>{s.phone||'—'}</td><td>{s.email||'—'}</td><td>{ps.length}</td><td>{money(ps.reduce((sum,p)=>sum+Number(p.total),0))}</td></tr>})}
-              {suppliers.length===0&&<tr><td colSpan={5}>No suppliers added yet.</td></tr>}
+            <div className="tablewrap"><table><thead><tr><th>SUPPLIER</th><th>PHONE</th><th>EMAIL</th><th>PURCHASES</th><th>TOTAL PURCHASED</th><th>TOTAL PAID</th><th>OUTSTANDING</th></tr></thead><tbody>
+              {suppliers.filter(s=>`${s.name} ${s.phone||''} ${s.email||''}`.toLowerCase().includes(supplierQuery.toLowerCase())).map(s=>{const ps=purchaseHistory.filter(p=>{const linked=Array.isArray(p.suppliers)?p.suppliers[0]:p.suppliers;return linked?.id===s.id});return <tr key={s.id}><td><b>{s.name}</b></td><td>{s.phone||'—'}</td><td>{s.email||'—'}</td><td>{ps.length}</td><td>{money(ps.reduce((sum,p)=>sum+Number(p.total),0))}</td><td>{money(supplierPayments.filter(p=>p.supplier_id===s.id).reduce((sum,p)=>sum+Number(p.amount||0),0))}</td><td>{money(Math.max(0,ps.reduce((sum,p)=>sum+Number(p.total),0)-supplierPayments.filter(p=>p.supplier_id===s.id).reduce((sum,p)=>sum+Number(p.amount||0),0)))}</td></tr>})}
+              {suppliers.length===0&&<tr><td colSpan={7}>No suppliers added yet.</td></tr>}
             </tbody></table></div></article></div>
         </> : page === 'Returns & Exchanges' ? <>
           <div className="heading"><div><p className="eyebrow">AFTER-SALES</p><h1>Returns & Exchanges</h1><p>Process item returns against an original invoice and record refunds.</p></div><button onClick={() => { void loadSales(); void loadReturns() }}>Refresh</button></div>
