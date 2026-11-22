@@ -80,6 +80,7 @@ export default function App() {
   const [attendanceDate, setAttendanceDate] = useState(localBusinessDate())
   const [attendanceEmployeeId, setAttendanceEmployeeId] = useState('')
   const [payrollRuns, setPayrollRuns] = useState<any[]>([])
+  const [payrollAttendance, setPayrollAttendance] = useState<any[]>([])
   const [payrollStart, setPayrollStart] = useState(new Date(new Date().getFullYear(),new Date().getMonth(),1).toISOString().slice(0,10))
   const [payrollEnd, setPayrollEnd] = useState(new Date(new Date().getFullYear(),new Date().getMonth()+1,0).toISOString().slice(0,10))
   const [payrollDeductions, setPayrollDeductions] = useState<Record<string,string>>({})
@@ -132,6 +133,15 @@ export default function App() {
     const { data, error } = await request
     if (error) setNotice(error.message)
     else if (data) setAttendanceRecords(data)
+  }
+
+  async function loadPayrollAttendance() {
+    if (!supabase || !session || !['Admin','Manager'].includes(currentEmployeeRole || '') || !payrollStart || !payrollEnd || payrollEnd < payrollStart) return
+    const { data, error } = await supabase.from('employee_attendance')
+      .select('employee_id,work_date,check_in,check_out,break_minutes,status')
+      .gte('work_date',payrollStart).lte('work_date',payrollEnd).order('work_date').limit(10000)
+    if (error) setNotice(error.message)
+    else if (data) setPayrollAttendance(data)
   }
 
   async function loadPayrollRuns() {
@@ -237,6 +247,7 @@ export default function App() {
     const {error:itemError}=await supabase!.from('payroll_items').insert(items.map(x=>({...x,payroll_run_id:run.id})))
     if(itemError){await supabase!.from('payroll_runs').delete().eq('id',run.id);setNotice(itemError.message);setBusy(false);return}
     setNotice('Draft payroll created. Review the figures before marking it as paid.')
+    setPayrollAttendance(periodAttendance||[])
     await loadPayrollRuns()
     setBusy(false)
   }
@@ -441,8 +452,9 @@ export default function App() {
     setPosVariants(mapped)
   }
 
-  useEffect(() => { if (session) { void loadProducts(); void loadPOSVariants(); void loadCustomers(); void loadSales(); void loadReturns(); void loadSuppliers(); void loadPurchases(); void loadExpenses(); void loadEmployees() } else { setEmployees([]); setCurrentEmployeeRole(supabaseConfigured ? null : 'Admin'); setAttendanceRecords([]); setPayrollRuns([]) } }, [session])
+  useEffect(() => { if (session) { void loadProducts(); void loadPOSVariants(); void loadCustomers(); void loadSales(); void loadReturns(); void loadSuppliers(); void loadPurchases(); void loadExpenses(); void loadEmployees() } else { setEmployees([]); setCurrentEmployeeRole(supabaseConfigured ? null : 'Admin'); setAttendanceRecords([]); setPayrollRuns([]); setPayrollAttendance([]) } }, [session])
   useEffect(() => { if (session && employees.length) { void loadAttendance(); if (['Admin','Manager'].includes(currentEmployeeRole || '')) void loadPayrollRuns() } }, [session, employees.length, currentEmployeeRole])
+  useEffect(() => { if (session && employees.length && ['Admin','Manager'].includes(currentEmployeeRole || '')) void loadPayrollAttendance() }, [session, employees.length, currentEmployeeRole, payrollStart, payrollEnd])
   useEffect(() => { if (activeProduct) void loadVariants(activeProduct.id) }, [activeProduct?.id, session])
 
   function addToCart(variant: POSVariant) {
@@ -817,7 +829,7 @@ export default function App() {
             <article className="payroll-builder"><h3>Create payroll run</h3><div className="payroll-filters"><label>Period start<input type="date" value={payrollStart} onChange={e=>setPayrollStart(e.target.value)}/></label><label>Period end<input type="date" value={payrollEnd} min={payrollStart} onChange={e=>setPayrollEnd(e.target.value)}/></label><button className="primary" disabled={busy} onClick={()=>void createPayrollRun()}>{busy?'Preparing…':'Generate draft payroll'}</button></div>
               <p className="muted">Monthly employees receive the configured monthly base salary for this run. Hourly employees are calculated from completed attendance hours. Enter any manual deductions below before generating the draft.</p>
               <div className="tablewrap"><table><thead><tr><th>EMPLOYEE</th><th>PAY BASIS</th><th>RATE</th><th>HOURS</th><th>DAYS</th><th>DEDUCTION (LKR)</th><th>EST. GROSS</th><th>EST. NET</th></tr></thead><tbody>
-                {employees.filter(e=>e.status==='Active').map(e=>{const rows=attendanceRecords.filter(r=>r.employee_id===e.id&&r.work_date>=payrollStart&&r.work_date<=payrollEnd);const hours=rows.reduce((n,r)=>n+attendanceHours(r),0);const days=rows.reduce((n,r)=>n+(r.status==='Half-day'?.5:['Present','Late'].includes(r.status)?1:0),0);const gross=(e.salary_basis||'Monthly')==='Hourly'?hours*Number(e.base_salary||0):monthlyPayForPeriod(Number(e.base_salary||0),payrollStart,payrollEnd);return <tr key={e.id}><td><b>{e.employee_no} – {e.full_name}</b></td><td>{e.salary_basis||'Monthly'}</td><td>{money(Number(e.base_salary||0))}</td><td>{hours.toFixed(2)}</td><td>{days.toFixed(1)}</td><td><input className="deduction-input" type="number" min="0" max={gross} step="0.01" value={payrollDeductions[e.id]||'0'} onChange={ev=>setPayrollDeductions(cur=>({...cur,[e.id]:ev.target.value}))}/></td><td>{money(gross)}</td><td>{money(Math.max(0,gross-Number(payrollDeductions[e.id]||0)))}</td></tr>})}
+                {employees.filter(e=>e.status==='Active').map(e=>{const rows=payrollAttendance.filter(r=>r.employee_id===e.id);const hours=rows.reduce((n,r)=>n+attendanceHours(r),0);const days=rows.reduce((n,r)=>n+(r.status==='Half-day'?.5:['Present','Late'].includes(r.status)?1:0),0);const gross=(e.salary_basis||'Monthly')==='Hourly'?hours*Number(e.base_salary||0):monthlyPayForPeriod(Number(e.base_salary||0),payrollStart,payrollEnd);return <tr key={e.id}><td><b>{e.employee_no} – {e.full_name}</b></td><td>{e.salary_basis||'Monthly'}</td><td>{money(Number(e.base_salary||0))}</td><td>{hours.toFixed(2)}</td><td>{days.toFixed(1)}</td><td><input className="deduction-input" type="number" min="0" max={gross} step="0.01" value={payrollDeductions[e.id]||'0'} onChange={ev=>setPayrollDeductions(cur=>({...cur,[e.id]:ev.target.value}))}/></td><td>{money(gross)}</td><td>{money(Math.max(0,gross-Number(payrollDeductions[e.id]||0)))}</td></tr>})}
                 {employees.filter(e=>e.status==='Active').length===0&&<tr><td colSpan={8}>No active employees.</td></tr>}
               </tbody></table></div>
             </article>
