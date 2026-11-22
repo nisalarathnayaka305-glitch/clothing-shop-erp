@@ -175,13 +175,15 @@ export default function App() {
         p_discount: discountValue,
         p_payment_method: paymentMethod,
         p_amount_received: received,
+        p_customer_id: selectedCustomer || null,
       })
       if (error) { setNotice(error.message); setBusy(false); return }
       const result = data as any
       setLastInvoice({ invoice_no: result.invoice_no, subtotal: Number(result.subtotal), discount: Number(result.discount),
         total: Number(result.total), amount_received: Number(result.amount_received), change_amount: Number(result.change_amount),
         payment_method: result.payment_method, created_at: result.created_at, items: invoiceItems })
-      await loadPOSVariants()\n      await loadSales()
+      await loadPOSVariants()
+      await loadSales()
     } else {
       setPosVariants(current => current.map(v => {
         const sold = cart.find(line => line.variant_id === v.id)
