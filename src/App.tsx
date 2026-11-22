@@ -479,6 +479,8 @@ export default function App() {
   const reportSales = sales.filter(s=>dateInRange(s.created_at,reportStart,reportEnd))
   const reportReturns = returns.filter(r=>dateInRange(r.created_at,reportStart,reportEnd))
   const reportExpenses = expenses.filter(e=>dateInRange(e.expense_date,reportStart,reportEnd))
+  const reportGrossSales = reportSales.reduce((sum,s)=>sum+Number(s.subtotal),0)
+  const reportDiscounts = reportSales.reduce((sum,s)=>sum+Number(s.discount),0)
   const reportRevenue = reportSales.reduce((sum,s)=>sum+Number(s.total),0)
   const reportRefunds = reportReturns.reduce((sum,r)=>sum+Number(r.refund_total),0)
   const reportCOGS = reportSales.reduce((sum,s)=>sum+(s.sale_items||[]).reduce((n:number,line:any)=>n+Number(line.unit_cost||0)*Number(line.quantity||0),0),0)
@@ -509,11 +511,11 @@ export default function App() {
                 {page === 'Overview' ? <>
           <div className="heading"><div><p className="eyebrow">LIVE SHOP OVERVIEW</p><h1>Good morning 👋</h1><p>Business performance based on the latest loaded transactions.</p></div><button onClick={()=>{void loadSales();void loadExpenses();void loadReturns();void loadPOSVariants();void loadProducts()}}>Refresh data</button></div>
           <div className="stats">
-            {[[ 'Today’s Sales', money(todayRevenue) ],[ 'Monthly Sales', money(monthRevenue) ],[ 'Estimated Monthly Profit', money(monthEstimatedProfit) ],[ 'Low Stock Variants', String(lowStockCount) ]].map(([label,value])=><article key={label}><small>{label}</small><h2>{value}</h2></article>)}
+            {[[ 'Today’s Sales', money(todayRevenue) ],[ 'Monthly Sales', money(monthRevenue) ],[ 'Estimated Monthly Profit', money(monthEstimatedProfit) ],[ 'Active Products', String(products.filter(p=>p.active).length) ],[ 'Low Stock Variants', String(lowStockCount) ]].map(([label,value])=><article key={label}><small>{label}</small><h2>{value}</h2></article>)}
           </div>
           <div className="dashboard-grid">
             <article><div className="toolbar"><h3>Monthly performance</h3><span className="muted">{monthKey}</span></div>
-              <div className="performance-list"><div><span>Gross sales</span><b>{money(monthRevenue)}</b></div><div><span>Refunds</span><b>{money(monthRefunds)}</b></div><div><span>Cost of goods sold</span><b>{money(monthCOGS)}</b></div><div><span>Gross profit</span><b>{money(monthGrossProfit)}</b></div><div><span>Operating expenses</span><b>{money(monthOperatingExpenses)}</b></div><div className="performance-total"><span>Estimated net profit</span><b>{money(monthEstimatedProfit)}</b></div></div>
+              <div className="performance-list"><div><span>Sales total</span><b>{money(monthRevenue)}</b></div><div><span>Refunds</span><b>{money(monthRefunds)}</b></div><div><span>Cost of goods sold</span><b>{money(monthCOGS)}</b></div><div><span>Gross profit</span><b>{money(monthGrossProfit)}</b></div><div><span>Operating expenses</span><b>{money(monthOperatingExpenses)}</b></div><div className="performance-total"><span>Estimated net profit</span><b>{money(monthEstimatedProfit)}</b></div></div>
             </article>
             <article><div className="toolbar"><h3>Low stock alerts</h3><button className="small-action" onClick={()=>setPage('Products & Stock')}>View inventory</button></div>
               <div className="tablewrap"><table><thead><tr><th>PRODUCT</th><th>SIZE / COLOUR</th><th>STOCK</th><th>REORDER</th></tr></thead><tbody>
@@ -532,7 +534,7 @@ export default function App() {
         </> : page === 'Reports' ? <>
           <div className="heading"><div><p className="eyebrow">BUSINESS INTELLIGENCE</p><h1>Reports & Analytics</h1><p>Review sales, refunds, estimated profit, payment methods and product performance.</p></div><button onClick={()=>{void loadSales();void loadExpenses();void loadReturns();void loadPOSVariants()}}>Refresh reports</button></div>
           <article className="report-filter"><label>From<input type="date" value={reportStart} max={reportEnd} onChange={e=>setReportStart(e.target.value)}/></label><label>To<input type="date" value={reportEnd} min={reportStart} onChange={e=>setReportEnd(e.target.value)}/></label><button onClick={()=>{const d=new Date();setReportEnd(d.toISOString().slice(0,10));setReportStart(new Date(d.getFullYear(),d.getMonth(),1).toISOString().slice(0,10))}}>This month</button><button onClick={()=>{const d=new Date();setReportEnd(d.toISOString().slice(0,10));setReportStart(new Date(d.getFullYear(),0,1).toISOString().slice(0,10))}}>This year</button></article>
-          <div className="stats report-stats">{[[ 'Gross Sales',money(reportRevenue) ],[ 'Refunds',money(reportRefunds) ],[ 'Net Sales',money(reportRevenue-reportRefunds) ],[ 'Gross Profit (Est.)',money(reportGrossProfit) ],[ 'Operating Expenses',money(reportOperatingExpenses) ],[ 'Net Profit (Est.)',money(reportNetProfit) ]].map(([label,value])=><article key={label}><small>{label}</small><h2>{value}</h2></article>)}</div>
+          <div className="stats report-stats">{[[ 'Sales Subtotal',money(reportGrossSales) ],[ 'Discounts',money(reportDiscounts) ],[ 'Refunds',money(reportRefunds) ],[ 'Net Sales',money(reportRevenue-reportRefunds) ],[ 'Gross Profit (Est.)',money(reportGrossProfit) ],[ 'Operating Expenses',money(reportOperatingExpenses) ],[ 'Net Profit (Est.)',money(reportNetProfit) ]].map(([label,value])=><article key={label}><small>{label}</small><h2>{value}</h2></article>)}</div>
           <div className="dashboard-grid">
             <article><h3>Sales by payment method</h3><div className="report-list">{paymentBreakdown.map(x=><div key={x.method}><span>{x.method}<small>{x.count} transactions</small></span><b>{money(x.total)}</b></div>)}</div></article>
             <article><h3>Expenses by category</h3><div className="report-list">{expenseBreakdown.map((x:any)=><div key={x.category}><span>{x.category}<small>{x.count} entries</small></span><b>{money(x.total)}</b></div>)}{expenseBreakdown.length===0&&<p className="muted">No expenses for this period.</p>}</div></article>
