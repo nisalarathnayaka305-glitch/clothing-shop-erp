@@ -82,6 +82,7 @@ returns uuid language plpgsql security definer set search_path = public as $
 declare v_employee_id uuid; v_attendance_id uuid;
 begin
   if auth.uid() is null then raise exception 'Authentication required'; end if;
+  if p_work_date <> (now() at time zone 'Asia/Colombo')::date then raise exception 'Employees can only punch attendance for the current Sri Lankan date'; end if;
   select id into v_employee_id from public.employees
    where auth_user_id=auth.uid() and status='Active' limit 1;
   if v_employee_id is null then raise exception 'No active employee profile is linked to this login'; end if;
@@ -89,7 +90,7 @@ begin
   values(v_employee_id,p_work_date,now(),'Present',auth.uid())
   on conflict(employee_id,work_date) do update
     set check_in=coalesce(public.employee_attendance.check_in,excluded.check_in),
-        status=case when public.employee_attendance.status in ('Leave','Absent') then public.employee_attendance.status else 'Present' end
+        status='Present'
   returning id into v_attendance_id;
   return v_attendance_id;
 end; $;
@@ -115,11 +116,12 @@ returns uuid language plpgsql security definer set search_path = public as $
 declare v_attendance_id uuid;
 begin
   if public.current_employee_role() not in ('Admin','Manager') then raise exception 'Only Admin or Manager can record attendance for another employee'; end if;
+  if p_work_date <> (now() at time zone 'Asia/Colombo')::date then raise exception 'Attendance punches are only allowed for the current Sri Lankan date'; end if;
   if not exists(select 1 from public.employees where id=p_employee_id and status='Active') then raise exception 'Active employee not found'; end if;
   insert into public.employee_attendance(employee_id,work_date,check_in,status,created_by)
   values(p_employee_id,p_work_date,now(),'Present',auth.uid())
   on conflict(employee_id,work_date) do update
-    set check_in=coalesce(public.employee_attendance.check_in,excluded.check_in)
+    set check_in=coalesce(public.employee_attendance.check_in,excluded.check_in), status='Present'
   returning id into v_attendance_id;
   return v_attendance_id;
 end; $;
@@ -130,7 +132,7 @@ declare v_attendance_id uuid;
 begin
   if public.current_employee_role() not in ('Admin','Manager') then raise exception 'Only Admin or Manager can record attendance for another employee'; end if;
   update public.employee_attendance set check_out=now()
-   where id=p_attendance_id and check_in is not null and check_out is null
+   where id=p_attendance_id and work_date=(now() at time zone 'Asia/Colombo')::date and check_in is not null and check_out is null
    returning id into v_attendance_id;
   if v_attendance_id is null then raise exception 'No open check-in was found'; end if;
   return v_attendance_id;
