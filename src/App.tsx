@@ -209,20 +209,24 @@ export default function App() {
 
   async function createPayrollRun() {
     if (!['Admin','Manager'].includes(currentEmployeeRole || '') || !session) { setNotice('Only Admin or Manager can prepare payroll.'); return }
-    if (payrollEnd < payrollStart) { setNotice('Payroll end date must be on or after the start date.'); return }
+    if (!payrollStart || !payrollEnd || payrollEnd < payrollStart) { setNotice('Enter a valid payroll date range.'); return }
     if (employees.filter(e=>e.status==='Active').length===0) { setNotice('No active employees are available for payroll.'); return }
     const duplicate=payrollRuns.find(r=>r.period_start===payrollStart && r.period_end===payrollEnd)
     if (duplicate) { setNotice('A payroll run already exists for this period.'); return }
     setBusy(true)
-    const active=employees.filter(e=>e.status==='Active')
+    const active=employees.filter(e=>e.status==='Active' && (!e.hire_date || e.hire_date<=payrollEnd))
+    const { data: periodAttendance, error: attendanceError } = await supabase!.from('employee_attendance')
+      .select('employee_id,work_date,check_in,check_out,break_minutes,status')
+      .gte('work_date',payrollStart).lte('work_date',payrollEnd).limit(10000)
+    if (attendanceError) { setNotice(attendanceError.message); setBusy(false); return }
     const items=active.map(employee=>{
-      const rows=attendanceRecords.filter(r=>r.employee_id===employee.id && r.work_date>=payrollStart && r.work_date<=payrollEnd)
+      const rows=(periodAttendance||[]).filter(r=>r.employee_id===employee.id)
       const hours=rows.reduce((sum,r)=>sum+attendanceHours(r),0)
       const days=rows.reduce((sum,r)=>sum+(r.status==='Half-day'?0.5:['Present','Late'].includes(r.status)?1:0),0)
       const basis=employee.salary_basis||'Monthly'
       const rate=Number(employee.base_salary||0)
       const gross=basis==='Hourly'?hours*rate:monthlyPayForPeriod(rate,payrollStart,payrollEnd)
-      const deduction=Math.min(gross,Math.max(0,Number(payrollDeductions[employee.id]||0)))
+      const rawDeduction=Number(payrollDeductions[employee.id]||0); const deduction=Math.min(gross,Math.max(0,Number.isFinite(rawDeduction)?rawDeduction:0))
       return { employee_id:employee.id,salary_basis:basis,base_salary:rate,days_present:days,hours_worked:Number(hours.toFixed(2)),gross_pay:Number(gross.toFixed(2)),deductions:Number(deduction.toFixed(2)),net_pay:Number((gross-deduction).toFixed(2)) }
     })
     const totals={gross:items.reduce((n,x)=>n+x.gross_pay,0),deductions:items.reduce((n,x)=>n+x.deductions,0),net:items.reduce((n,x)=>n+x.net_pay,0)}
@@ -760,7 +764,7 @@ export default function App() {
             <p>Your current login is not linked to an active employee profile with Admin or Manager access. Ask the shop owner to complete the one-time administrator setup described in <code>supabase/migrations/0010_employee_management.sql</code>.</p>
             <p className="muted">Employee records and role changes are protected by Supabase Row Level Security. Do not disable those policies to make this screen work.</p>
           </article> : <>
-            {currentEmployeeRole === 'Admin' && <article className="employee-entry"><div className="toolbar"><h3>{employeeEditingId ? 'Update employee' : 'Add new employee'}</h3>{employeeEditingId && <button type="button" onClick={()=>{setEmployeeEditingId(null);setEmployeeForm({ full_name: '', email: '', phone: '', job_title: '', department: '', employment_type: 'Full-time', hire_date: new Date().toISOString().slice(0,10), auth_user_id: '', role: 'Staff', status: 'Active', notes: '' })}}>Cancel edit</button>}</div>
+            {currentEmployeeRole === 'Admin' && <article className="employee-entry"><div className="toolbar"><h3>{employeeEditingId ? 'Update employee' : 'Add new employee'}</h3>{employeeEditingId && <button type="button" onClick={()=>{setEmployeeEditingId(null);setEmployeeForm({ full_name: '', email: '', phone: '', job_title: '', department: '', employment_type: 'Full-time', hire_date: new Date().toISOString().slice(0,10), auth_user_id: '', role: 'Staff', status: 'Active', salary_basis: 'Monthly', base_salary: '0', notes: '' })}}>Cancel edit</button>}</div>
               <form className="employee-form" onSubmit={saveEmployee}>
                 <label>Full name<input required value={employeeForm.full_name} onChange={e=>setEmployeeForm({...employeeForm,full_name:e.target.value})}/></label>
                 <label>Email<input type="email" value={employeeForm.email} onChange={e=>setEmployeeForm({...employeeForm,email:e.target.value})}/></label>
