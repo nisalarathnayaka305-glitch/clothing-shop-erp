@@ -3,9 +3,9 @@ import type { Session } from '@supabase/supabase-js'
 import { supabase, supabaseConfigured, money, type Product } from './lib'
 
 const demo: Product[] = [
-  { id: '1', sku: 'TSH-001', name: 'Classic Cotton T-Shirt', category: 'T-Shirts', selling_price: 2500, cost_price: 1450, active: true },
-  { id: '2', sku: 'JNS-014', name: 'Slim Fit Denim Jeans', category: 'Jeans', selling_price: 6500, cost_price: 3900, active: true },
-  { id: '3', sku: 'DRS-008', name: 'Floral Summer Dress', category: 'Dresses', selling_price: 5800, cost_price: 3200, active: true },
+  { id: '1', product_no: 'PRD-00001', sku: 'TSH-001', name: 'Classic Cotton T-Shirt', category: 'T-Shirts', selling_price: 2500, cost_price: 1450, active: true },
+  { id: '2', product_no: 'PRD-00002', sku: 'JNS-014', name: 'Slim Fit Denim Jeans', category: 'Jeans', selling_price: 6500, cost_price: 3900, active: true },
+  { id: '3', product_no: 'PRD-00003', sku: 'DRS-008', name: 'Floral Summer Dress', category: 'Dresses', selling_price: 5800, cost_price: 3200, active: true },
 ]
 
 const navigation = ['Overview', 'Point of Sale', 'Products & Stock', 'Purchases', 'Customers', 'Suppliers', 'Expenses', 'Reports', 'Employees', 'Settings']
@@ -46,7 +46,7 @@ export default function App() {
     if (!supabase || !session) return
     const { data, error } = await supabase
       .from('products')
-      .select('id,sku,name,category,selling_price,cost_price,active')
+      .select('id,product_no,sku,name,category,selling_price,cost_price,active')
       .order('created_at', { ascending: false })
     if (error) setNotice(error.message)
     else if (data) setProducts(data as Product[])
@@ -96,12 +96,13 @@ export default function App() {
       if (error) setNotice(error.message)
       else {
         await loadProducts()
-        setNotice('Product saved successfully.')
+        setNotice('Product saved successfully. Product No. was generated automatically.')
         setShow(false)
         setForm({ sku: '', name: '', category: 'General', selling_price: '', cost_price: '' })
       }
     } else {
-      setProducts(current => [{ ...row, id: crypto.randomUUID() }, ...current])
+      const nextNumber = Math.max(0, ...products.map(product => Number(product.product_no?.replace('PRD-', '') || 0))) + 1
+      setProducts(current => [{ ...row, product_no: `PRD-${String(nextNumber).padStart(5, '0')}`, id: crypto.randomUUID() }, ...current])
       setNotice('Demo mode: this product is temporary and is not stored in Supabase.')
       setShow(false)
       setForm({ sku: '', name: '', category: 'General', selling_price: '', cost_price: '' })
@@ -110,7 +111,7 @@ export default function App() {
   }
 
   const filtered = products.filter(product =>
-    `${product.name} ${product.sku} ${product.category || ''}`.toLowerCase().includes(query.toLowerCase()),
+    `${product.product_no} ${product.name} ${product.sku} ${product.category || ''}`.toLowerCase().includes(query.toLowerCase()),
   )
 
   if (!authReady) return <div className="auth-screen"><article><h2>Clothing ERP</h2><p>Checking your secure session…</p></article></div>
@@ -156,16 +157,17 @@ export default function App() {
         </> : page === 'Products & Stock' ? <>
           <div className="heading"><div><p className="eyebrow">CATALOGUE</p><h1>Products & Stock</h1><p>Manage clothing products and selling prices.</p></div><button className="primary" onClick={() => setShow(true)}>+ Add Product</button></div>
           <article>
-            <div className="toolbar"><h3>Product catalogue ({products.length})</h3><input aria-label="Search products" placeholder="Search products…" value={query} onChange={event => setQuery(event.target.value)} /><button onClick={() => void loadProducts()}>Refresh</button></div>
-            <div className="tablewrap"><table><thead><tr><th>PRODUCT</th><th>SKU</th><th>CATEGORY</th><th>SELLING PRICE</th><th>COST PRICE</th></tr></thead>
-              <tbody>{filtered.map(product => <tr key={product.id}><td>{product.name}</td><td>{product.sku}</td><td>{product.category}</td><td>{money(product.selling_price)}</td><td>{money(product.cost_price)}</td></tr>)}
-                {filtered.length === 0 && <tr><td colSpan={5}>No products found.</td></tr>}</tbody></table></div>
+            <div className="toolbar"><h3>Product catalogue ({products.length})</h3><input aria-label="Search products" placeholder="Search product no, name or SKU…" value={query} onChange={event => setQuery(event.target.value)} /><button onClick={() => void loadProducts()}>Refresh</button></div>
+            <div className="tablewrap"><table><thead><tr><th>PRODUCT NO.</th><th>PRODUCT</th><th>SKU</th><th>CATEGORY</th><th>SELLING PRICE</th><th>COST PRICE</th></tr></thead>
+              <tbody>{filtered.map(product => <tr key={product.id}><td><b>{product.product_no}</b></td><td>{product.name}</td><td>{product.sku}</td><td>{product.category}</td><td>{money(product.selling_price)}</td><td>{money(product.cost_price)}</td></tr>)}
+                {filtered.length === 0 && <tr><td colSpan={6}>No products found.</td></tr>}</tbody></table></div>
           </article>
         </> : <article className="empty"><h2>{page}</h2><p>This module is on the retail ERP roadmap and will be developed in the next phases.</p></article>}
       </section>
     </main>
     {show && <div className="overlay"><form onSubmit={saveProduct}>
       <h2>Add product</h2>
+      <p className="muted">A unique Product No. (PRD-00001 format) will be generated automatically when you save.</p>
       <label>Product name<input required value={form.name} onChange={event => setForm({ ...form, name: event.target.value })} /></label>
       <label>SKU / Product code<input required value={form.sku} onChange={event => setForm({ ...form, sku: event.target.value })} /></label>
       <label>Category<input value={form.category} onChange={event => setForm({ ...form, category: event.target.value })} /></label>
