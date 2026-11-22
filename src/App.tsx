@@ -591,6 +591,7 @@ export default function App() {
   }
 
   useEffect(() => { if (session) { void loadProducts(); void loadPOSVariants(); void loadCustomers(); void loadSales(); void loadCustomerPayments(); void loadReturns(); void loadSuppliers(); void loadPurchases(); void loadSupplierPayments(); void loadExpenses(); void loadEmployees() } else { setEmployees([]); setCurrentEmployeeRole(supabaseConfigured ? null : 'Admin'); setAttendanceRecords([]); setPayrollRuns([]); setPayrollAttendance([]) } }, [session])
+  useEffect(() => { if (!session) return; if (page === 'Loyalty') void loadLoyalty(); if (page === 'Cash Management') void loadCashSessions(); if (page === 'Purchase Orders') { void loadPurchaseRequests(); void loadSuppliers(); void loadPOSVariants() } }, [page, session])
   useEffect(() => { if (session && employees.length) { void loadAttendance(); if (['Admin','Manager'].includes(currentEmployeeRole || '')) void loadPayrollRuns() } }, [session, employees.length, currentEmployeeRole])
   useEffect(() => { if (session && employees.length && ['Admin','Manager'].includes(currentEmployeeRole || '')) void loadPayrollAttendance() }, [session, employees.length, currentEmployeeRole, payrollStart, payrollEnd])
   useEffect(() => { if (activeProduct) void loadVariants(activeProduct.id) }, [activeProduct?.id, session])
