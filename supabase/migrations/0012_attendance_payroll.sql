@@ -64,7 +64,7 @@ using (public.current_employee_role() in ('Admin','Manager'));
 grant select, insert, update, delete on public.employee_attendance to authenticated;
 
 create or replace function public.set_attendance_updated_at()
-returns trigger language plpgsql set search_path = public as $$$
+returns trigger language plpgsql set search_path = public as $$
 begin
   new.updated_at = now();
   return new;
