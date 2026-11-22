@@ -187,8 +187,14 @@ export default function App() {
         const sold = cart.find(line => line.variant_id === v.id)
         return sold ? { ...v, quantity: v.quantity - sold.quantity } : v
       }))
-      setLastInvoice({ invoice_no: `DEMO-${Date.now()}`, subtotal: cartSubtotal, discount: discountValue, total: cartTotal,
-        amount_received: received, change_amount: received - cartTotal, payment_method: paymentMethod, created_at: new Date().toISOString(), items: invoiceItems })
+      const demoInvoiceNo = `DEMO-${Date.now()}`
+      const demoCustomer = customers.find(c => c.id === selectedCustomer) || null
+      const demoCreatedAt = new Date().toISOString()
+      setLastInvoice({ invoice_no: demoInvoiceNo, subtotal: cartSubtotal, discount: discountValue, total: cartTotal,
+        amount_received: received, change_amount: received - cartTotal, payment_method: paymentMethod, created_at: demoCreatedAt, items: invoiceItems })
+      setSales(current => [{ id: demoInvoiceNo, invoice_no: demoInvoiceNo, subtotal: cartSubtotal, discount: discountValue, total: cartTotal,
+        amount_received: received, change_amount: received - cartTotal, payment_method: paymentMethod, created_at: demoCreatedAt,
+        customers: demoCustomer, sale_items: invoiceItems.map((line,i) => ({ id: `${demoInvoiceNo}-${i}`, product_no: line.product_no, product_name: line.name, sku: line.sku, size: line.size, colour: line.colour, quantity: line.quantity, unit_price: line.unit_price, line_total: line.unit_price * line.quantity })) }, ...current])
       setNotice('Demo sale completed locally only. No data was saved to Supabase.')
     }
     setCart([]); setDiscount('0'); setAmountReceived(''); setSelectedCustomer(''); setBusy(false)
