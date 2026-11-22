@@ -16,6 +16,7 @@ type CartLine = { variant_id: string; product_no: string; name: string; sku: str
 type Invoice = { invoice_no: string; subtotal: number; discount: number; total: number; amount_received: number; change_amount: number; payment_method: string; created_at: string; items: CartLine[] }
 
 const navigation = ['Overview', 'Point of Sale', 'Sales History', 'Returns & Exchanges', 'Products & Stock', 'Purchases', 'Customers', 'Suppliers', 'Expenses', 'Reports', 'Employees', 'Attendance', 'Payroll', 'Settings']
+const localBusinessDate = () => { const now = new Date(); return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0,10) }
 
 export default function App() {
   const [products, setProducts] = useState<Product[]>(demo)
@@ -76,7 +77,7 @@ export default function App() {
   const [employeeEditingId, setEmployeeEditingId] = useState<string | null>(null)
   const [employeeForm, setEmployeeForm] = useState({ full_name: '', email: '', phone: '', job_title: '', department: '', employment_type: 'Full-time', hire_date: new Date().toISOString().slice(0,10), auth_user_id: '', role: 'Staff', status: 'Active', salary_basis: 'Monthly', base_salary: '0', notes: '' })
   const [attendanceRecords, setAttendanceRecords] = useState<any[]>([])
-  const [attendanceDate, setAttendanceDate] = useState(new Date().toISOString().slice(0,10))
+  const [attendanceDate, setAttendanceDate] = useState(localBusinessDate())
   const [attendanceEmployeeId, setAttendanceEmployeeId] = useState('')
   const [payrollRuns, setPayrollRuns] = useState<any[]>([])
   const [payrollStart, setPayrollStart] = useState(new Date(new Date().getFullYear(),new Date().getMonth(),1).toISOString().slice(0,10))
@@ -144,7 +145,7 @@ export default function App() {
 
   async function punchIn(employeeId: string) {
     if (!employeeId || !session) { setNotice('Link this login to an employee record before recording attendance.'); return }
-    if (attendanceDate !== new Date().toISOString().slice(0,10)) { setNotice('Check-in can only be recorded for today.'); return }
+    if (attendanceDate !== localBusinessDate()) { setNotice('Check-in can only be recorded for today.'); return }
     const own = employees.find(e => e.auth_user_id === session.user.id)
     const isManager = ['Admin','Manager'].includes(currentEmployeeRole || '')
     if (!isManager && own?.id !== employeeId) { setNotice('You can only record attendance for your own employee profile.'); return }
@@ -191,6 +192,10 @@ export default function App() {
     return Math.max(0,(new Date(record.check_out).getTime()-new Date(record.check_in).getTime())/3600000-Number(record.break_minutes||0)/60)
   }
 
+  function activePeriodHasPaidRun(runs: any[], start: string, end: string) {
+    return runs.some(run=>run.period_start===start && run.period_end===end && run.status==='Paid')
+  }
+
   function monthlyPayForPeriod(amount: number, start: string, end: string) {
     let cursor = new Date(start + 'T00:00:00Z')
     const last = new Date(end + 'T00:00:00Z')
@@ -213,6 +218,7 @@ export default function App() {
     if (employees.filter(e=>e.status==='Active').length===0) { setNotice('No active employees are available for payroll.'); return }
     const duplicate=payrollRuns.find(r=>r.period_start===payrollStart && r.period_end===payrollEnd)
     if (duplicate) { setNotice('A payroll run already exists for this period.'); return }
+    if (activePeriodHasPaidRun(payrollRuns,payrollStart,payrollEnd)) { setNotice('This payroll period has already been paid.'); return }
     setBusy(true)
     const active=employees.filter(e=>e.status==='Active' && (!e.hire_date || e.hire_date<=payrollEnd))
     const { data: periodAttendance, error: attendanceError } = await supabase!.from('employee_attendance')
@@ -540,6 +546,7 @@ export default function App() {
     event.preventDefault()
     if (currentEmployeeRole !== 'Admin') { setNotice('Only an administrator can add or update employees.'); return }
     if (!employeeForm.full_name.trim()) { setNotice('Employee name is required.'); return }
+    if (!Number.isFinite(Number(employeeForm.base_salary)) || Number(employeeForm.base_salary) < 0) { setNotice('Enter a valid non-negative pay rate.'); return }
     const row = {
       full_name: employeeForm.full_name.trim(),
       email: employeeForm.email.trim() || null,
@@ -796,7 +803,7 @@ export default function App() {
             <div><small>ATTENDANCE DATE</small><input type="date" value={attendanceDate} onChange={e=>setAttendanceDate(e.target.value)}/></div>
             {['Admin','Manager'].includes(currentEmployeeRole||'') && <div><small>EMPLOYEE</small><select value={attendanceEmployeeId || (employees.find(e=>e.auth_user_id===session?.user.id)?.id || '')} onChange={e=>setAttendanceEmployeeId(e.target.value)}><option value="">Select employee</option>{employees.filter(e=>e.status==='Active').map(e=><option key={e.id} value={e.id}>{e.employee_no} – {e.full_name}</option>)}</select></div>}
             <div className="punch-actions">
-              {(() => { const own=employees.find(e=>e.auth_user_id===session?.user.id); const targetId=['Admin','Manager'].includes(currentEmployeeRole||'')?(attendanceEmployeeId||own?.id||''):(own?.id||''); const todayRecord=attendanceRecords.find(r=>r.employee_id===targetId&&r.work_date===attendanceDate); return <><button className="primary" disabled={busy||!targetId||!!todayRecord?.check_in||attendanceDate!==new Date().toISOString().slice(0,10)} onClick={()=>void punchIn(targetId)}>Check in</button><button disabled={busy||!todayRecord?.check_in||!!todayRecord?.check_out||attendanceDate!==new Date().toISOString().slice(0,10)} onClick={()=>void punchOut(todayRecord)}>Check out</button><span className="muted">{attendanceDate!==new Date().toISOString().slice(0,10)?'Punching is available for today only.':todayRecord?.check_in?todayRecord.check_out?'Shift completed': 'Checked in at '+new Date(todayRecord.check_in).toLocaleTimeString(): 'No check-in recorded for this date.'}</span></> })()}
+              {(() => { const own=employees.find(e=>e.auth_user_id===session?.user.id); const targetId=['Admin','Manager'].includes(currentEmployeeRole||'')?(attendanceEmployeeId||own?.id||''):(own?.id||''); const todayRecord=attendanceRecords.find(r=>r.employee_id===targetId&&r.work_date===attendanceDate); return <><button className="primary" disabled={busy||!targetId||!!todayRecord?.check_in||attendanceDate!==localBusinessDate()} onClick={()=>void punchIn(targetId)}>Check in</button><button disabled={busy||!todayRecord?.check_in||!!todayRecord?.check_out||attendanceDate!==new Date().toISOString().slice(0,10)} onClick={()=>void punchOut(todayRecord)}>Check out</button><span className="muted">{attendanceDate!==new Date().toISOString().slice(0,10)?'Punching is available for today only.':todayRecord?.check_in?todayRecord.check_out?'Shift completed': 'Checked in at '+new Date(todayRecord.check_in).toLocaleTimeString(): 'No check-in recorded for this date.'}</span></> })()}
             </div>
           </article>
           {!session && supabaseConfigured && <article><p>Please sign in to record attendance.</p></article>}
