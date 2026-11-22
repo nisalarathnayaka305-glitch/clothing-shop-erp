@@ -506,10 +506,6 @@ export default function App() {
     <main><header><b>Workspace / {page}</b><div className="header-actions"><span className={supabaseConfigured ? 'ok' : 'demo'}>{supabaseConfigured ? 'Supabase connected' : 'Demo mode'}</span>{session && <button className="text-button" onClick={() => void signOut()}>Sign out</button>}</div></header>
       <section>
         {notice && <p className="notice">{notice}<button className="dismiss" onClick={() => setNotice('')}>×</button></p>}
-        {page === 'Overview' ? <>
-          <p className="eyebrow">SHOP OVERVIEW</p><h1>Good morning 👋</h1><p>Here’s what’s happening with your shop.</p>
-          <div className="stats">{[[ 'Today’s Sales', 'Rs. 48,650' ], [ 'Gross Profit', 'Rs. 16,420' ], [ 'Products', String(products.length) ], [ 'Low Stock Variants', String(lowStockCount) ]].map(([label, value]) => <article key={label}><small>{label}</small><h2>{value}</h2></article>)}</div>
-          <article><h3>Quick actions</h3><button onClick={() => setPage('Products & Stock')}>Manage products & stock</button><button onClick={() => setPage('Point of Sale')}>Open POS</button><p className="muted">Sales and profit are sample figures until POS is implemented.</p></article>
                 {page === 'Overview' ? <>
           <div className="heading"><div><p className="eyebrow">LIVE SHOP OVERVIEW</p><h1>Good morning 👋</h1><p>Business performance based on the latest loaded transactions.</p></div><button onClick={()=>{void loadSales();void loadExpenses();void loadReturns();void loadPOSVariants();void loadProducts()}}>Refresh data</button></div>
           <div className="stats">
