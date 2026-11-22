@@ -63,7 +63,7 @@ begin
   if p_amount is null or p_amount <= 0 or p_amount <> round(p_amount,2) then
     raise exception 'Payment amount must be greater than zero and have no more than two decimal places';
   end if;
-  if p_payment_method not in ('Cash','Card','Bank Transfer','Cheque') then
+  if p_payment_method is null or p_payment_method not in ('Cash','Card','Bank Transfer','Cheque') then
     raise exception 'Select a valid payment method';
   end if;
   if p_payment_date is null then raise exception 'Payment date is required'; end if;
