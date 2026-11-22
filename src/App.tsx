@@ -15,7 +15,7 @@ type POSVariant = ProductVariant & { product_no: string; product_name: string; s
 type CartLine = { variant_id: string; product_no: string; name: string; sku: string; size: string; colour: string; unit_price: number; quantity: number; available: number }
 type Invoice = { invoice_no: string; subtotal: number; discount: number; total: number; amount_received: number; change_amount: number; payment_method: string; created_at: string; items: CartLine[] }
 
-const navigation = ['Overview', 'Point of Sale', 'Products & Stock', 'Purchases', 'Customers', 'Suppliers', 'Expenses', 'Reports', 'Employees', 'Settings']
+const navigation = ['Overview', 'Point of Sale', 'Sales History', 'Products & Stock', 'Purchases', 'Customers', 'Suppliers', 'Expenses', 'Reports', 'Employees', 'Settings']
 
 export default function App() {
   const [products, setProducts] = useState<Product[]>(demo)
@@ -41,6 +41,14 @@ export default function App() {
   const [paymentMethod, setPaymentMethod] = useState('Cash')
   const [amountReceived, setAmountReceived] = useState('')
   const [lastInvoice, setLastInvoice] = useState<Invoice | null>(null)
+  const [customers, setCustomers] = useState<any[]>([])
+  const [customerQuery, setCustomerQuery] = useState('')
+  const [customerForm, setCustomerForm] = useState({ full_name: '', phone: '', email: '' })
+  const [selectedCustomer, setSelectedCustomer] = useState('')
+  const [sales, setSales] = useState<any[]>([])
+  const [salesQuery, setSalesQuery] = useState('')
+  const [salesDate, setSalesDate] = useState('')
+  const [selectedSale, setSelectedSale] = useState<any | null>(null)
 
   useEffect(() => {
     if (!supabase) return
@@ -80,6 +88,23 @@ export default function App() {
     setVariants(current => [...current.filter(v => v.product_id !== productId), ...mapped])
   }
 
+  async function loadCustomers() {
+    if (!supabase || !session) return
+    const { data, error } = await supabase.from('customers')
+      .select('id,full_name,phone,email,created_at').order('full_name')
+    if (error) setNotice(error.message)
+    else if (data) setCustomers(data)
+  }
+
+  async function loadSales() {
+    if (!supabase || !session) return
+    const { data, error } = await supabase.from('sales')
+      .select('id,invoice_no,subtotal,discount,total,payment_method,amount_received,change_amount,created_at,customers(id,full_name,phone),sale_items(id,product_no,product_name,sku,size,colour,quantity,unit_price,line_total)')
+      .order('created_at', { ascending: false }).limit(500)
+    if (error) setNotice(error.message)
+    else if (data) setSales(data)
+  }
+
   async function loadPOSVariants() {
     if (!supabase || !session) return
     const { data, error } = await supabase.from('product_variants')
@@ -97,7 +122,7 @@ export default function App() {
     setPosVariants(mapped)
   }
 
-  useEffect(() => { if (session) { void loadProducts(); void loadPOSVariants() } }, [session])
+  useEffect(() => { if (session) { void loadProducts(); void loadPOSVariants(); void loadCustomers(); void loadSales() } }, [session])
   useEffect(() => { if (activeProduct) void loadVariants(activeProduct.id) }, [activeProduct?.id, session])
 
   function addToCart(variant: POSVariant) {
@@ -145,7 +170,7 @@ export default function App() {
     setBusy(true)
     const invoiceItems = cart.map(line => ({ ...line }))
     if (supabase && session) {
-      const { data, error } = await supabase.rpc('complete_sale', {
+      const { data, error } = await supabase.rpc('complete_sale_for_customer', {
         p_items: cart.map(line => ({ variant_id: line.variant_id, quantity: line.quantity })),
         p_discount: discountValue,
         p_payment_method: paymentMethod,
@@ -156,7 +181,7 @@ export default function App() {
       setLastInvoice({ invoice_no: result.invoice_no, subtotal: Number(result.subtotal), discount: Number(result.discount),
         total: Number(result.total), amount_received: Number(result.amount_received), change_amount: Number(result.change_amount),
         payment_method: result.payment_method, created_at: result.created_at, items: invoiceItems })
-      await loadPOSVariants()
+      await loadPOSVariants()\n      await loadSales()
     } else {
       setPosVariants(current => current.map(v => {
         const sold = cart.find(line => line.variant_id === v.id)
@@ -166,7 +191,23 @@ export default function App() {
         amount_received: received, change_amount: received - cartTotal, payment_method: paymentMethod, created_at: new Date().toISOString(), items: invoiceItems })
       setNotice('Demo sale completed locally only. No data was saved to Supabase.')
     }
-    setCart([]); setDiscount('0'); setAmountReceived(''); setBusy(false)
+    setCart([]); setDiscount('0'); setAmountReceived(''); setSelectedCustomer(''); setBusy(false)
+  }
+
+  async function saveCustomer(event: FormEvent) {
+    event.preventDefault()
+    const row = { full_name: customerForm.full_name.trim(), phone: customerForm.phone.trim() || null, email: customerForm.email.trim() || null }
+    if (!row.full_name) { setNotice('Customer name is required.'); return }
+    setBusy(true)
+    if (supabase && session) {
+      const { data, error } = await supabase.from('customers').insert(row).select('id,full_name,phone,email,created_at').single()
+      if (error) setNotice(error.message)
+      else { setCustomers(current => [...current, data].sort((x,y) => x.full_name.localeCompare(y.full_name))); setCustomerForm({ full_name: '', phone: '', email: '' }); setNotice('Customer saved successfully.') }
+    } else {
+      const customer = { ...row, id: crypto.randomUUID(), created_at: new Date().toISOString() }
+      setCustomers(current => [...current, customer]); setCustomerForm({ full_name: '', phone: '', email: '' }); setNotice('Demo mode: customer is temporary and not saved to Supabase.')
+    }
+    setBusy(false)
   }
 
   async function signIn(event: FormEvent) {
@@ -273,6 +314,20 @@ export default function App() {
           <p className="eyebrow">SHOP OVERVIEW</p><h1>Good morning 👋</h1><p>Here’s what’s happening with your shop.</p>
           <div className="stats">{[[ 'Today’s Sales', 'Rs. 48,650' ], [ 'Gross Profit', 'Rs. 16,420' ], [ 'Products', String(products.length) ], [ 'Low Stock Variants', String(lowStockCount) ]].map(([label, value]) => <article key={label}><small>{label}</small><h2>{value}</h2></article>)}</div>
           <article><h3>Quick actions</h3><button onClick={() => setPage('Products & Stock')}>Manage products & stock</button><button onClick={() => setPage('Point of Sale')}>Open POS</button><p className="muted">Sales and profit are sample figures until POS is implemented.</p></article>
+        </> : page === 'Sales History' ? <>
+          <div className="heading"><div><p className="eyebrow">TRANSACTIONS</p><h1>Sales History</h1><p>Search invoices and review completed sales.</p></div><button onClick={() => void loadSales()}>Refresh</button></div>
+          <article>
+            <div className="sales-filters"><input placeholder="Search invoice number or customer…" value={salesQuery} onChange={e => setSalesQuery(e.target.value)} /><label>Sale date<input type="date" value={salesDate} onChange={e => setSalesDate(e.target.value)} /></label></div>
+            <div className="tablewrap"><table><thead><tr><th>DATE</th><th>INVOICE</th><th>CUSTOMER</th><th>PAYMENT</th><th>ITEMS</th><th>TOTAL</th><th>ACTION</th></tr></thead><tbody>
+              {sales.filter(s => {
+                const customer = Array.isArray(s.customers) ? s.customers[0] : s.customers
+                const term = `${s.invoice_no} ${customer?.full_name || 'Walk-in'} ${customer?.phone || ''}`.toLowerCase()
+                return term.includes(salesQuery.toLowerCase()) && (!salesDate || new Date(s.created_at).toLocaleDateString('en-CA') === salesDate)
+              }).map(s => { const customer = Array.isArray(s.customers) ? s.customers[0] : s.customers; return <tr key={s.id}><td>{new Date(s.created_at).toLocaleString()}</td><td><b>{s.invoice_no}</b></td><td>{customer?.full_name || 'Walk-in customer'}</td><td>{s.payment_method}</td><td>{s.sale_items?.reduce((n:number,i:any)=>n+i.quantity,0) || 0}</td><td>{money(Number(s.total))}</td><td><button className="small-action" onClick={() => setSelectedSale(s)}>View invoice</button></td></tr> })}
+              {sales.length === 0 && <tr><td colSpan={7}>No sales recorded yet.</td></tr>}
+            </tbody></table></div>
+          </article>
+          {selectedSale && <div className="invoice-preview"><div className="heading"><div><p className="eyebrow">INVOICE DETAILS</p><h2>{selectedSale.invoice_no}</h2></div><button onClick={() => setSelectedSale(null)}>Close</button><button className="primary" onClick={() => window.print()}>Print</button></div><p>{new Date(selectedSale.created_at).toLocaleString()} · {selectedSale.payment_method}</p><div className="tablewrap"><table><thead><tr><th>PRODUCT</th><th>SIZE / COLOUR</th><th>QTY</th><th>UNIT PRICE</th><th>LINE TOTAL</th></tr></thead><tbody>{(selectedSale.sale_items || []).map((i:any)=><tr key={i.id}><td>{i.product_name}<small>{i.product_no} · {i.sku}</small></td><td>{i.size} / {i.colour}</td><td>{i.quantity}</td><td>{money(Number(i.unit_price))}</td><td>{money(Number(i.line_total))}</td></tr>)}</tbody></table></div><p>Subtotal: {money(Number(selectedSale.subtotal))} · Discount: {money(Number(selectedSale.discount))} · <b>Total: {money(Number(selectedSale.total))}</b></p><p>Received: {money(Number(selectedSale.amount_received))} · Change: {money(Number(selectedSale.change_amount))}</p></div>}
         </> : page === 'Products & Stock' ? <>
           <div className="heading"><div><p className="eyebrow">CATALOGUE & INVENTORY</p><h1>Products & Stock</h1><p>Manage products, size/colour variants and stock quantities.</p></div><button className="primary" onClick={() => setShow(true)}>+ Add Product</button></div>
           <article><div className="toolbar"><h3>Product catalogue ({products.length})</h3><input aria-label="Search products" placeholder="Search product no, name or SKU…" value={query} onChange={e => setQuery(e.target.value)} /><button onClick={() => void loadProducts()}>Refresh</button></div>
@@ -295,10 +350,26 @@ export default function App() {
               <div className="cart-lines">{cart.map(line => <div className="cart-line" key={line.variant_id}><div><b>{line.name}</b><small>{line.product_no} · {line.size} / {line.colour}</small><small>{money(line.unit_price)} each</small></div><div className="qty-control"><button type="button" onClick={() => updateCartQuantity(line.variant_id,line.quantity-1)}>−</button><span>{line.quantity}</span><button type="button" onClick={() => updateCartQuantity(line.variant_id,line.quantity+1)}>+</button></div><b>{money(line.unit_price*line.quantity)}</b></div>)}
                 {cart.length === 0 && <p className="muted">Your cart is empty. Add products to begin.</p>}</div>
               <div className="bill-summary"><div><span>Subtotal</span><b>{money(cartSubtotal)}</b></div><label>Discount (LKR)<input type="number" min="0" step="0.01" value={discount} onChange={e => setDiscount(e.target.value)} /></label><div className="grand-total"><span>Total</span><strong>{money(cartTotal)}</strong></div></div>
-              <form onSubmit={completeSale} className="checkout-form"><label>Payment method<select value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)}><option>Cash</option><option>Card</option><option>Bank Transfer</option></select></label><label>Amount received (LKR)<input required type="number" min={cartTotal} step="0.01" value={amountReceived} onChange={e => setAmountReceived(e.target.value)} placeholder={String(cartTotal)} /></label><p className="change-due">Change: <b>{money(Math.max(0,(Number(amountReceived)||0)-cartTotal))}</b></p><button className="primary full" disabled={busy || cart.length===0}>{busy ? 'Processing…' : 'Complete Sale'}</button></form>
+              <form onSubmit={completeSale} className="checkout-form"><label>Customer<select value={selectedCustomer} onChange={e => setSelectedCustomer(e.target.value)}><option value="">Walk-in customer</option>{customers.map(c => <option key={c.id} value={c.id}>{c.full_name}{c.phone ? ` · ${c.phone}` : ''}</option>)}</select></label><label>Payment method<select value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)}><option>Cash</option><option>Card</option><option>Bank Transfer</option></select></label><label>Amount received (LKR)<input required type="number" min={cartTotal} step="0.01" value={amountReceived} onChange={e => setAmountReceived(e.target.value)} placeholder={String(cartTotal)} /></label><p className="change-due">Change: <b>{money(Math.max(0,(Number(amountReceived)||0)-cartTotal))}</b></p><button className="primary full" disabled={busy || cart.length===0}>{busy ? 'Processing…' : 'Complete Sale'}</button></form>
             </article>
           </div>
           {lastInvoice && <div className="invoice-preview"><div className="heading"><div><p className="eyebrow">SALE COMPLETED</p><h2>Invoice {lastInvoice.invoice_no}</h2></div><button className="primary" onClick={() => window.print()}>Print invoice</button></div><p>{new Date(lastInvoice.created_at).toLocaleString()}</p><div className="tablewrap"><table><thead><tr><th>ITEM</th><th>SIZE / COLOUR</th><th>QTY</th><th>PRICE</th><th>AMOUNT</th></tr></thead><tbody>{lastInvoice.items.map((line,i)=><tr key={i}><td>{line.name}<small>{line.product_no}</small></td><td>{line.size} / {line.colour}</td><td>{line.quantity}</td><td>{money(line.unit_price)}</td><td>{money(line.unit_price*line.quantity)}</td></tr>)}</tbody></table></div><p>Subtotal: {money(lastInvoice.subtotal)} · Discount: {money(lastInvoice.discount)} · <b>Total: {money(lastInvoice.total)}</b></p><p>Paid by {lastInvoice.payment_method} · Received {money(lastInvoice.amount_received)} · Change {money(lastInvoice.change_amount)}</p></div>}
+        </> : page === 'Customers' ? <>
+          <div className="heading"><div><p className="eyebrow">CUSTOMER DIRECTORY</p><h1>Customers</h1><p>Save customer contact details and see their purchase totals.</p></div></div>
+          <div className="customer-layout">
+            <article><h3>Add customer</h3><form onSubmit={saveCustomer} className="customer-form">
+              <label>Full name<input required value={customerForm.full_name} onChange={e => setCustomerForm({ ...customerForm, full_name: e.target.value })} /></label>
+              <label>Phone number<input value={customerForm.phone} onChange={e => setCustomerForm({ ...customerForm, phone: e.target.value })} /></label>
+              <label>Email address<input type="email" value={customerForm.email} onChange={e => setCustomerForm({ ...customerForm, email: e.target.value })} /></label>
+              <button className="primary" disabled={busy}>{busy ? 'Saving…' : 'Save customer'}</button>
+            </form></article>
+            <article><div className="toolbar"><h3>Customer list ({customers.length})</h3><input placeholder="Search name, phone or email…" value={customerQuery} onChange={e => setCustomerQuery(e.target.value)} /><button onClick={() => void loadCustomers()}>Refresh</button></div>
+              <div className="tablewrap"><table><thead><tr><th>CUSTOMER</th><th>PHONE</th><th>EMAIL</th><th>ORDERS</th><th>TOTAL SPENT</th></tr></thead><tbody>
+                {customers.filter(c => `${c.full_name} ${c.phone || ''} ${c.email || ''}`.toLowerCase().includes(customerQuery.toLowerCase())).map(c => { const customerSales = sales.filter(s => { const linked = Array.isArray(s.customers) ? s.customers[0] : s.customers; return linked?.id === c.id }); return <tr key={c.id}><td><b>{c.full_name}</b></td><td>{c.phone || '—'}</td><td>{c.email || '—'}</td><td>{customerSales.length}</td><td>{money(customerSales.reduce((sum,s)=>sum+Number(s.total),0))}</td></tr> })}
+                {customers.length === 0 && <tr><td colSpan={5}>No customers added yet.</td></tr>}
+              </tbody></table></div>
+            </article>
+          </div>
         </> : <article className="empty"><h2>{page}</h2><p>This module is planned for a later development phase.</p></article>}
       </section>
     </main>
