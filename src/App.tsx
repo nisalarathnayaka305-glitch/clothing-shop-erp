@@ -63,6 +63,11 @@ export default function App() {
   const [purchaseLines, setPurchaseLines] = useState<Record<string, { quantity: string; unit_cost: string }>>({})
   const [purchaseReference, setPurchaseReference] = useState('')
   const [purchaseDate, setPurchaseDate] = useState(new Date().toISOString().slice(0,10))
+  const [expenses, setExpenses] = useState<any[]>([])
+  const [expenseForm, setExpenseForm] = useState({ category: 'General', description: '', amount: '', payment_method: 'Cash', paid_to: '', supplier_id: '', expense_date: new Date().toISOString().slice(0,10), reference_no: '' })
+  const [expenseQuery, setExpenseQuery] = useState('')
+  const [expenseCategoryFilter, setExpenseCategoryFilter] = useState('All')
+  const [expenseMonth, setExpenseMonth] = useState(new Date().toISOString().slice(0,7))
 
   useEffect(() => {
     if (!supabase) return
@@ -117,6 +122,46 @@ export default function App() {
       .order('created_at', { ascending: false }).limit(500)
     if (error) setNotice(error.message)
     else if (data) setSales(data)
+  }
+
+  async function loadExpenses() {
+    if (!supabase || !session) return
+    const { data, error } = await supabase.from('expenses')
+      .select('id,expense_no,category,description,amount,payment_method,paid_to,reference_no,expense_date,created_at,supplier_id,suppliers(name)')
+      .order('expense_date', { ascending: false }).limit(1000)
+    if (error) setNotice(error.message)
+    else if (data) setExpenses(data)
+  }
+
+  async function saveExpense(event: FormEvent) {
+    event.preventDefault()
+    const amount = Number(expenseForm.amount)
+    if (!expenseForm.description.trim() || !Number.isFinite(amount) || amount <= 0 || !expenseForm.expense_date) {
+      setNotice('Enter an expense description, a valid amount and date.'); return
+    }
+    if (expenseForm.category === 'Supplier Payment' && !expenseForm.supplier_id) {
+      setNotice('Select a supplier for a supplier payment.'); return
+    }
+    const row = {
+      category: expenseForm.category, description: expenseForm.description.trim(), amount,
+      payment_method: expenseForm.payment_method, paid_to: expenseForm.paid_to.trim() || null,
+      supplier_id: expenseForm.category === 'Supplier Payment' ? expenseForm.supplier_id : null,
+      expense_date: expenseForm.expense_date, reference_no: expenseForm.reference_no.trim() || null,
+    }
+    setBusy(true)
+    if (supabase && session) {
+      const { data, error } = await supabase.from('expenses').insert(row)
+        .select('id,expense_no,category,description,amount,payment_method,paid_to,reference_no,expense_date,created_at,supplier_id,suppliers(name)').single()
+      if (error) { setNotice(error.message); setBusy(false); return }
+      setExpenses(current => [data,...current])
+      setNotice('Expense saved successfully.')
+    } else {
+      const supplier = suppliers.find(s => s.id === row.supplier_id)
+      setExpenses(current => [{ ...row, id: crypto.randomUUID(), expense_no: `EXP-DEMO-${Date.now()}`, created_at: new Date().toISOString(), suppliers: supplier ? { name: supplier.name } : null },...current])
+      setNotice('Demo mode: expense is temporary and is not saved to Supabase.')
+    }
+    setExpenseForm({ category: 'General', description: '', amount: '', payment_method: 'Cash', paid_to: '', supplier_id: '', expense_date: new Date().toISOString().slice(0,10), reference_no: '' })
+    setBusy(false)
   }
 
   async function loadSuppliers() {
@@ -232,7 +277,7 @@ export default function App() {
     setPosVariants(mapped)
   }
 
-  useEffect(() => { if (session) { void loadProducts(); void loadPOSVariants(); void loadCustomers(); void loadSales(); void loadReturns(); void loadSuppliers(); void loadPurchases() } }, [session])
+  useEffect(() => { if (session) { void loadProducts(); void loadPOSVariants(); void loadCustomers(); void loadSales(); void loadReturns(); void loadSuppliers(); void loadPurchases(); void loadExpenses() } }, [session])
   useEffect(() => { if (activeProduct) void loadVariants(activeProduct.id) }, [activeProduct?.id, session])
 
   function addToCart(variant: POSVariant) {
@@ -446,6 +491,32 @@ export default function App() {
             </tbody></table></div>
           </article>
           {selectedSale && <div className="invoice-preview"><div className="heading"><div><p className="eyebrow">INVOICE DETAILS</p><h2>{selectedSale.invoice_no}</h2></div><button onClick={() => setSelectedSale(null)}>Close</button><button className="primary" onClick={() => window.print()}>Print</button></div><p>{new Date(selectedSale.created_at).toLocaleString()} · {selectedSale.payment_method}</p><div className="tablewrap"><table><thead><tr><th>PRODUCT</th><th>SIZE / COLOUR</th><th>QTY</th><th>UNIT PRICE</th><th>LINE TOTAL</th></tr></thead><tbody>{(selectedSale.sale_items || []).map((i:any)=><tr key={i.id}><td>{i.product_name}<small>{i.product_no} · {i.sku}</small></td><td>{i.size} / {i.colour}</td><td>{i.quantity}</td><td>{money(Number(i.unit_price))}</td><td>{money(Number(i.line_total))}</td></tr>)}</tbody></table></div><p>Subtotal: {money(Number(selectedSale.subtotal))} · Discount: {money(Number(selectedSale.discount))} · <b>Total: {money(Number(selectedSale.total))}</b></p><p>Received: {money(Number(selectedSale.amount_received))} · Change: {money(Number(selectedSale.change_amount))}</p></div>}
+        </> : page === 'Expenses' ? <>
+          <div className="heading"><div><p className="eyebrow">CASH OUTFLOWS</p><h1>Expenses Management</h1><p>Record shop expenses, supplier payments and staff payments.</p></div><button onClick={() => void loadExpenses()}>Refresh</button></div>
+          <div className="expense-summary">
+            <article><small>Expenses this month</small><h2>{money(expenses.filter(e => String(e.expense_date).slice(0,7) === expenseMonth).reduce((sum,e)=>sum+Number(e.amount),0))}</h2></article>
+            <article><small>All recorded expenses</small><h2>{money(expenses.reduce((sum,e)=>sum+Number(e.amount),0))}</h2></article>
+            <article><small>Transactions</small><h2>{expenses.length}</h2></article>
+          </div>
+          <article className="expense-entry"><h3>Record an expense</h3><form onSubmit={saveExpense} className="expense-form">
+            <label>Category<select value={expenseForm.category} onChange={e=>setExpenseForm({...expenseForm,category:e.target.value,supplier_id:''})}>{['General','Supplier Payment','Employee Salary','Wages','Rent','Electricity','Water','Internet & Phone','Transport','Packaging','Maintenance','Marketing','Bank Charges','Other'].map(x=><option key={x}>{x}</option>)}</select></label>
+            <label>Description<input required value={expenseForm.description} onChange={e=>setExpenseForm({...expenseForm,description:e.target.value})} placeholder="What was this payment for?" /></label>
+            <label>Amount (LKR)<input required type="number" min="0.01" step="0.01" value={expenseForm.amount} onChange={e=>setExpenseForm({...expenseForm,amount:e.target.value})} /></label>
+            <label>Payment method<select value={expenseForm.payment_method} onChange={e=>setExpenseForm({...expenseForm,payment_method:e.target.value})}><option>Cash</option><option>Card</option><option>Bank Transfer</option><option>Cheque</option></select></label>
+            <label>Paid to<input value={expenseForm.paid_to} onChange={e=>setExpenseForm({...expenseForm,paid_to:e.target.value})} placeholder="Person / company name" /></label>
+            {expenseForm.category === 'Supplier Payment' && <label>Supplier<select required value={expenseForm.supplier_id} onChange={e=>setExpenseForm({...expenseForm,supplier_id:e.target.value})}><option value="">Select supplier…</option>{suppliers.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></label>}
+            <label>Expense date<input required type="date" value={expenseForm.expense_date} onChange={e=>setExpenseForm({...expenseForm,expense_date:e.target.value})} /></label>
+            <label>Reference / Receipt No.<input value={expenseForm.reference_no} onChange={e=>setExpenseForm({...expenseForm,reference_no:e.target.value})} /></label>
+            <button className="primary" disabled={busy}>{busy?'Saving…':'Save Expense'}</button>
+          </form></article>
+          <article><div className="toolbar"><h3>Expense history ({expenses.length})</h3><input placeholder="Search description, paid to or expense no…" value={expenseQuery} onChange={e=>setExpenseQuery(e.target.value)} /></div>
+            <div className="expense-filters"><label>Month<input type="month" value={expenseMonth} onChange={e=>setExpenseMonth(e.target.value)} /></label><label>Category<select value={expenseCategoryFilter} onChange={e=>setExpenseCategoryFilter(e.target.value)}><option>All</option>{Array.from(new Set(expenses.map(e=>e.category))).sort().map(x=><option key={x}>{x}</option>)}</select></label></div>
+            <div className="tablewrap"><table><thead><tr><th>DATE</th><th>EXPENSE NO.</th><th>CATEGORY</th><th>DESCRIPTION</th><th>PAID TO</th><th>METHOD</th><th>AMOUNT</th></tr></thead><tbody>
+              {expenses.filter(e=>String(e.expense_date).slice(0,7)===expenseMonth && (expenseCategoryFilter==='All'||e.category===expenseCategoryFilter) && `${e.expense_no} ${e.description} ${e.paid_to||''} ${e.category}`.toLowerCase().includes(expenseQuery.toLowerCase())).map(e=>{const supplier=Array.isArray(e.suppliers)?e.suppliers[0]:e.suppliers;return <tr key={e.id}><td>{e.expense_date}</td><td><b>{e.expense_no}</b></td><td>{e.category}</td><td>{e.description}{e.reference_no&&<small>Ref: {e.reference_no}</small>}</td><td>{supplier?.name || e.paid_to || '—'}</td><td>{e.payment_method}</td><td><b>{money(Number(e.amount))}</b></td></tr>})}
+              {expenses.filter(e=>String(e.expense_date).slice(0,7)===expenseMonth && (expenseCategoryFilter==='All'||e.category===expenseCategoryFilter) && `${e.expense_no} ${e.description} ${e.paid_to||''} ${e.category}`.toLowerCase().includes(expenseQuery.toLowerCase())).length===0&&<tr><td colSpan={7}>No expenses match these filters for this month.</td></tr>}
+            </tbody></table></div>
+          </article>
+          <p className="muted">Supplier and employee payments entered here are expense records only. They do not yet reconcile supplier outstanding balances or payroll records.</p>
         </> : page === 'Purchases' ? <>
           <div className="heading"><div><p className="eyebrow">INBOUND INVENTORY</p><h1>Purchases & Receiving</h1><p>Record supplier deliveries and add received quantities to stock.</p></div><button onClick={() => {void loadPurchases();void loadPOSVariants()}}>Refresh</button></div>
           <article className="purchase-form"><h3>Receive a supplier purchase</h3><form onSubmit={receivePurchase}>
