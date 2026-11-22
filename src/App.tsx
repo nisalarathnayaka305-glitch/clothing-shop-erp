@@ -33,7 +33,7 @@ export default function App() {
   const [activeProduct, setActiveProduct] = useState<Product | null>(null)
   const [variantForm, setVariantForm] = useState({ size: 'M', colour: '', barcode: '', quantity: '0', reorder_level: '5' })
   const [adjustments, setAdjustments] = useState<Record<string, { change: string; reason: string }>>({})
-  const [posVariants, setPosVariants] = useState<POSVariant[]>([])
+  const [posVariants, setPosVariants] = useState<POSVariant[]>(demoVariants.map(v => { const p = demo.find(item => item.id === v.product_id)!; return { ...v, product_no: p.product_no, product_name: p.name, sku: p.sku, selling_price: p.selling_price } }))
   const [posQuery, setPosQuery] = useState('')
   const [barcodeInput, setBarcodeInput] = useState('')
   const [cart, setCart] = useState<CartLine[]>([])
@@ -117,9 +117,10 @@ export default function App() {
   function addBarcode(event: FormEvent) {
     event.preventDefault()
     const code = barcodeInput.trim().toLowerCase()
-    const found = posVariants.find(v => (v.barcode || '').toLowerCase() === code || v.sku.toLowerCase() === code || v.product_no.toLowerCase() === code)
-    if (!found) { setNotice('No matching variant found. Check the barcode or product number.'); return }
-    addToCart(found)
+    const matches = posVariants.filter(v => (v.barcode || '').toLowerCase() === code || v.sku.toLowerCase() === code || v.product_no.toLowerCase() === code)
+    if (matches.length === 0) { setNotice('No matching variant found. Check the barcode or product number.'); return }
+    if (matches.length > 1) { setNotice('This code matches multiple sizes/colours. Select the correct variant from the product list.'); return }
+    addToCart(matches[0])
     setBarcodeInput('')
   }
 
@@ -139,7 +140,7 @@ export default function App() {
     if (!cart.length) { setNotice('Add at least one item to the cart.'); return }
     if (discountValue > cartSubtotal) { setNotice('Discount cannot exceed the subtotal.'); return }
     const received = Number(amountReceived)
-    if (!Number.isFinite(received) || received < cartTotal) { setNotice('Amount received must be equal to or greater than the total.'); return }
+    if (!Number.isFinite(received) || received < cartTotal) { setNotice('Amount received must be equal to or greater than the total.'); return }\n    if (paymentMethod !== 'Cash' && received !== cartTotal) { setNotice('For card or bank transfer, enter the exact sale total.'); return }
     setBusy(true)
     const invoiceItems = cart.map(line => ({ ...line }))
     if (supabase && session) {
