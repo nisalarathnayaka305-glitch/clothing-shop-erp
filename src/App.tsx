@@ -15,7 +15,7 @@ type POSVariant = ProductVariant & { product_no: string; product_name: string; s
 type CartLine = { variant_id: string; product_no: string; name: string; sku: string; size: string; colour: string; unit_price: number; quantity: number; available: number }
 type Invoice = { invoice_no: string; subtotal: number; discount: number; total: number; amount_received: number; change_amount: number; payment_method: string; created_at: string; items: CartLine[] }
 
-const navigation = ['Overview', 'Point of Sale', 'Sales History', 'Returns & Exchanges', 'Products & Stock', 'Purchases', 'Customers', 'Customer Accounts', 'Suppliers', 'Supplier Accounts', 'Expenses', 'Reports', 'Employees', 'Attendance', 'Payroll', 'Settings']
+const navigation = ['Overview', 'Point of Sale', 'Sales History', 'Returns & Exchanges', 'Products & Stock', 'Purchases', 'Purchase Orders', 'Customers', 'Customer Accounts', 'Loyalty', 'Cash Management', 'Suppliers', 'Supplier Accounts', 'Expenses', 'Reports', 'Employees', 'Attendance', 'Payroll', 'Settings']
 const localBusinessDate = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Colombo' }).format(new Date())
 
 export default function App() {
@@ -43,6 +43,14 @@ export default function App() {
   const [amountReceived, setAmountReceived] = useState('')
   const [lastInvoice, setLastInvoice] = useState<Invoice | null>(null)
   const [customers, setCustomers] = useState<any[]>([])
+  const [loyaltyRows, setLoyaltyRows] = useState<any[]>([])
+  const [cashSession, setCashSession] = useState<any | null>(null)
+  const [cashHistory, setCashHistory] = useState<any[]>([])
+  const [cashFloat, setCashFloat] = useState('0')
+  const [cashCounted, setCashCounted] = useState('')
+  const [cashMovement, setCashMovement] = useState({ type: 'Cash In', amount: '', reason: '' })
+  const [purchaseRequests, setPurchaseRequests] = useState<any[]>([])
+  const [purchaseRequestForm, setPurchaseRequestForm] = useState({ supplier_id: '', variant_id: '', quantity: '1', unit_cost: '0', notes: '' })
   const [customerQuery, setCustomerQuery] = useState('')
   const [customerForm, setCustomerForm] = useState({ full_name: '', phone: '', email: '' })
   const [selectedCustomer, setSelectedCustomer] = useState('')
@@ -583,6 +591,7 @@ export default function App() {
   }
 
   useEffect(() => { if (session) { void loadProducts(); void loadPOSVariants(); void loadCustomers(); void loadSales(); void loadCustomerPayments(); void loadReturns(); void loadSuppliers(); void loadPurchases(); void loadSupplierPayments(); void loadExpenses(); void loadEmployees() } else { setEmployees([]); setCurrentEmployeeRole(supabaseConfigured ? null : 'Admin'); setAttendanceRecords([]); setPayrollRuns([]); setPayrollAttendance([]) } }, [session])
+  useEffect(() => { if (!session) return; if (page === 'Loyalty') void loadLoyalty(); if (page === 'Cash Management') void loadCashSessions(); if (page === 'Purchase Orders') { void loadPurchaseRequests(); void loadSuppliers(); void loadPOSVariants() } }, [page, session])
   useEffect(() => { if (session && employees.length) { void loadAttendance(); if (['Admin','Manager'].includes(currentEmployeeRole || '')) void loadPayrollRuns() } }, [session, employees.length, currentEmployeeRole])
   useEffect(() => { if (session && employees.length && ['Admin','Manager'].includes(currentEmployeeRole || '')) void loadPayrollAttendance() }, [session, employees.length, currentEmployeeRole, payrollStart, payrollEnd])
   useEffect(() => { if (activeProduct) void loadVariants(activeProduct.id) }, [activeProduct?.id, session])
@@ -679,6 +688,70 @@ export default function App() {
       setNotice('Demo sale completed locally only. No data was saved to Supabase.')
     }
     setCart([]); setDiscount('0'); setAmountReceived(''); setSelectedCustomer(''); setBusy(false)
+  }
+
+  async function loadLoyalty() {
+    if (!supabase || !session) return
+    const { data, error } = await supabase.from('customer_loyalty_ledger').select('id,customer_id,points,entry_type,description,created_at,customers(full_name,phone)').order('created_at',{ascending:false}).limit(500)
+    if (error) setNotice(error.message); else setLoyaltyRows(data || [])
+  }
+
+  async function loadCashSessions() {
+    if (!supabase || !session) return
+    const { data, error } = await supabase.from('cash_sessions').select('*').order('opened_at',{ascending:false}).limit(100)
+    if (error) { setNotice(error.message); return }
+    setCashHistory(data || [])
+    setCashSession((data || []).find((x:any)=>x.status==='Open' && x.cashier_id===session.user.id) || null)
+  }
+
+  async function openCashSession(event: FormEvent) {
+    event.preventDefault(); if (!supabase) return
+    setBusy(true)
+    const { data,error } = await supabase.rpc('open_cash_session',{p_opening_float:Number(cashFloat),p_note:null})
+    if (error) setNotice(error.message); else { setNotice('Cash drawer opened.'); await loadCashSessions() }
+    setBusy(false)
+  }
+
+  async function addCashMovement(event: FormEvent) {
+    event.preventDefault(); if (!supabase || !cashSession) return
+    setBusy(true)
+    const {error}=await supabase.rpc('record_cash_session_entry',{p_session_id:cashSession.id,p_type:cashMovement.type,p_amount:Number(cashMovement.amount),p_reason:cashMovement.reason})
+    if(error) setNotice(error.message); else { setNotice('Cash movement recorded.'); setCashMovement({type:'Cash In',amount:'',reason:''}); await loadCashSessions() }
+    setBusy(false)
+  }
+
+  async function closeCashSession(event: FormEvent) {
+    event.preventDefault(); if (!supabase || !cashSession) return
+    setBusy(true)
+    const {error}=await supabase.rpc('close_cash_session',{p_session_id:cashSession.id,p_counted_cash:Number(cashCounted),p_note:null})
+    if(error) setNotice(error.message); else { setNotice('Cash drawer closed and variance recorded.'); setCashCounted(''); await loadCashSessions() }
+    setBusy(false)
+  }
+
+  async function loadPurchaseRequests() {
+    if (!supabase || !session) return
+    const {data,error}=await supabase.from('purchase_requests').select('*,suppliers(name),purchase_request_items(*,product_variants(size,colour,products(name,product_no)))').order('created_at',{ascending:false}).limit(100)
+    if(error) setNotice(error.message); else setPurchaseRequests(data || [])
+  }
+
+  async function createPurchaseRequest(event: FormEvent) {
+    event.preventDefault(); if(!supabase) return
+    if(!purchaseRequestForm.supplier_id || !purchaseRequestForm.variant_id || Number(purchaseRequestForm.quantity)<=0 || Number(purchaseRequestForm.unit_cost)<0) {setNotice('Select supplier and variant and enter valid quantity and cost.');return}
+    setBusy(true)
+    const {data,error}=await supabase.from('purchase_requests').insert({supplier_id:purchaseRequestForm.supplier_id,notes:purchaseRequestForm.notes.trim()||null}).select('id').single()
+    if(error){setNotice(error.message);setBusy(false);return}
+    const item=await supabase.from('purchase_request_items').insert({request_id:data.id,variant_id:purchaseRequestForm.variant_id,quantity:Number(purchaseRequestForm.quantity),estimated_unit_cost:Number(purchaseRequestForm.unit_cost)})
+    if(item.error){await supabase.from('purchase_requests').delete().eq('id',data.id);setNotice(item.error.message);setBusy(false);return}
+    const submit=await supabase.rpc('submit_purchase_request',{p_request_id:data.id})
+    if(submit.error)setNotice(submit.error.message);else{setNotice('Purchase request submitted for approval.');setPurchaseRequestForm({supplier_id:'',variant_id:'',quantity:'1',unit_cost:'0',notes:''});await loadPurchaseRequests()}
+    setBusy(false)
+  }
+
+  async function approvePurchaseRequest(id:string) {
+    if(!supabase)return
+    setBusy(true);const {error}=await supabase.rpc('approve_purchase_request',{p_request_id:id})
+    if(error)setNotice(error.message);else{setNotice('Purchase request approved.');await loadPurchaseRequests()}
+    setBusy(false)
   }
 
   async function saveCustomer(event: FormEvent) {
@@ -1250,6 +1323,22 @@ export default function App() {
               </tbody></table></div>
             </article>
           </div>
+        </> : page === 'Loyalty' ? <>
+          <div className="heading"><div><p className="eyebrow">CUSTOMER RETENTION</p><h1>Customer Loyalty</h1><p>Earn 1 point for every LKR 100 of a linked customer sale. Points are tracked in a ledger.</p></div><button onClick={()=>void loadLoyalty()}>Refresh</button></div>
+          <div className="stats"><article><small>Points issued</small><h2>{loyaltyRows.filter(x=>x.points>0).reduce((n,x)=>n+Number(x.points),0)}</h2></article><article><small>Points redeemed / adjusted</small><h2>{Math.abs(loyaltyRows.filter(x=>x.points<0).reduce((n,x)=>n+Number(x.points),0))}</h2></article><article><small>Customers with points</small><h2>{new Set(loyaltyRows.map(x=>x.customer_id)).size}</h2></article></div>
+          <article><div className="toolbar"><h3>Points ledger</h3></div><div className="tablewrap"><table><thead><tr><th>DATE</th><th>CUSTOMER</th><th>TYPE</th><th>POINTS</th><th>DESCRIPTION</th></tr></thead><tbody>{loyaltyRows.map(x=><tr key={x.id}><td>{new Date(x.created_at).toLocaleString()}</td><td>{x.customers?.full_name||'—'}</td><td>{x.entry_type}</td><td>{x.points>0?'+':''}{x.points}</td><td>{x.description||'—'}</td></tr>)}{!loyaltyRows.length&&<tr><td colSpan={5}>No loyalty points yet. Link a customer to a sale to earn points automatically.</td></tr>}</tbody></table></div></article>
+        </> : page === 'Cash Management' ? <>
+          <div className="heading"><div><p className="eyebrow">CASH CONTROL</p><h1>Cash Drawer Management</h1><p>Open a cashier session, record cash movements and reconcile the drawer at closing.</p></div><button onClick={()=>void loadCashSessions()}>Refresh</button></div>
+          {!cashSession ? <article><h3>Open cash drawer</h3><form className="inline-form" onSubmit={openCashSession}><label>Opening float (LKR)<input type="number" min="0" step="0.01" required value={cashFloat} onChange={e=>setCashFloat(e.target.value)}/></label><button className="primary" disabled={busy}>Open cash session</button></form></article> : <>
+            <div className="stats"><article><small>Opening float</small><h2>{money(Number(cashSession.opening_float))}</h2></article><article><small>Opened</small><h2>{new Date(cashSession.opened_at).toLocaleTimeString()}</h2></article><article><small>Status</small><h2>Open</h2></article></div>
+            <article><h3>Cash in / out</h3><form className="inline-form" onSubmit={addCashMovement}><label>Movement<select value={cashMovement.type} onChange={e=>setCashMovement({...cashMovement,type:e.target.value})}><option>Cash In</option><option>Cash Out</option></select></label><label>Amount (LKR)<input type="number" min="0.01" step="0.01" required value={cashMovement.amount} onChange={e=>setCashMovement({...cashMovement,amount:e.target.value})}/></label><label>Reason<input required value={cashMovement.reason} onChange={e=>setCashMovement({...cashMovement,reason:e.target.value})}/></label><button disabled={busy}>Record movement</button></form></article>
+            <article><h3>Close cash drawer</h3><form className="inline-form" onSubmit={closeCashSession}><label>Counted cash (LKR)<input type="number" min="0" step="0.01" required value={cashCounted} onChange={e=>setCashCounted(e.target.value)}/></label><button className="primary" disabled={busy}>Close & reconcile</button></form></article>
+          </>}
+          <article><h3>Recent cash sessions</h3><div className="tablewrap"><table><thead><tr><th>OPENED</th><th>CASHIER</th><th>STATUS</th><th>EXPECTED</th><th>COUNTED</th><th>VARIANCE</th></tr></thead><tbody>{cashHistory.map(x=><tr key={x.id}><td>{new Date(x.opened_at).toLocaleString()}</td><td>{x.cashier_id===session?.user.id?'You':x.cashier_id}</td><td>{x.status}</td><td>{x.expected_cash==null?'—':money(Number(x.expected_cash))}</td><td>{x.counted_cash==null?'—':money(Number(x.counted_cash))}</td><td>{x.cash_difference==null?'—':money(Number(x.cash_difference))}</td></tr>)}</tbody></table></div></article>
+        </> : page === 'Purchase Orders' ? <>
+          <div className="heading"><div><p className="eyebrow">PROCUREMENT CONTROL</p><h1>Purchase Requests & Approvals</h1><p>Create a request for supplier stock, submit it and approve it before using the existing receiving workflow.</p></div><button onClick={()=>void loadPurchaseRequests()}>Refresh</button></div>
+          <article><h3>Create purchase request</h3><form onSubmit={createPurchaseRequest} className="customer-form"><label>Supplier<select required value={purchaseRequestForm.supplier_id} onChange={e=>setPurchaseRequestForm({...purchaseRequestForm,supplier_id:e.target.value})}><option value="">Select supplier</option>{suppliers.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select></label><label>Product / variant<select required value={purchaseRequestForm.variant_id} onChange={e=>setPurchaseRequestForm({...purchaseRequestForm,variant_id:e.target.value})}><option value="">Select variant</option>{posVariants.map(x=><option key={x.id} value={x.id}>{x.product_no} · {x.product_name} · {x.size}/{x.colour}</option>)}</select></label><label>Quantity<input type="number" min="1" required value={purchaseRequestForm.quantity} onChange={e=>setPurchaseRequestForm({...purchaseRequestForm,quantity:e.target.value})}/></label><label>Estimated unit cost (LKR)<input type="number" min="0" step="0.01" required value={purchaseRequestForm.unit_cost} onChange={e=>setPurchaseRequestForm({...purchaseRequestForm,unit_cost:e.target.value})}/></label><label>Notes<input value={purchaseRequestForm.notes} onChange={e=>setPurchaseRequestForm({...purchaseRequestForm,notes:e.target.value})}/></label><button className="primary" disabled={busy}>Submit purchase request</button></form></article>
+          <article><h3>Purchase requests</h3><div className="tablewrap"><table><thead><tr><th>REQUEST</th><th>SUPPLIER</th><th>ITEMS</th><th>STATUS</th><th>CREATED</th><th>ACTION</th></tr></thead><tbody>{purchaseRequests.map(x=><tr key={x.id}><td><b>{x.request_no}</b></td><td>{x.suppliers?.name||'—'}</td><td>{(x.purchase_request_items||[]).map((i:any)=>`${i.quantity} × ${i.product_variants?.products?.name||'Product'} ${i.product_variants?.size||''}/${i.product_variants?.colour||''}`).join(', ')}</td><td>{x.status}</td><td>{new Date(x.created_at).toLocaleDateString()}</td><td>{x.status==='Submitted'?<button className="small-action" disabled={busy} onClick={()=>void approvePurchaseRequest(x.id)}>Approve</button>:x.status==='Approved'?'Ready to receive':'—'}</td></tr>)}{!purchaseRequests.length&&<tr><td colSpan={6}>No purchase requests recorded.</td></tr>}</tbody></table></div></article>
         </> : page === 'Settings' ? <>
           <div className="heading"><div><p className="eyebrow">SYSTEM ADMINISTRATION</p><h1>Settings & Data Backup</h1><p>Export operational data for secure offline retention.</p></div></div>
           <article><h3>Database data export</h3><p className="muted">Downloads up to 10,000 rows per operational table in a JSON file. This is a data export, not a full Supabase point-in-time backup; it does not include authentication credentials, database schema, storage files or project settings.</p><button className="primary" disabled={busy || !['Admin'].includes(currentEmployeeRole||'')} onClick={()=>void exportDataBackup()}>{busy?'Preparing export…':'Download data backup (JSON)'}</button>{currentEmployeeRole!=='Admin'&&<p className="muted">Only Admin users can export the database data.</p>}</article>
