@@ -55,6 +55,14 @@ export default function App() {
   const [restockReturned, setRestockReturned] = useState(true)
   const [refundMethod, setRefundMethod] = useState('Cash')
   const [returns, setReturns] = useState<any[]>([])
+  const [suppliers, setSuppliers] = useState<any[]>([])
+  const [supplierForm, setSupplierForm] = useState({ name: '', phone: '', email: '' })
+  const [supplierQuery, setSupplierQuery] = useState('')
+  const [purchaseHistory, setPurchaseHistory] = useState<any[]>([])
+  const [purchaseSupplier, setPurchaseSupplier] = useState('')
+  const [purchaseLines, setPurchaseLines] = useState<Record<string, { quantity: string; unit_cost: string }>>({})
+  const [purchaseReference, setPurchaseReference] = useState('')
+  const [purchaseDate, setPurchaseDate] = useState(new Date().toISOString().slice(0,10))
 
   useEffect(() => {
     if (!supabase) return
@@ -109,6 +117,63 @@ export default function App() {
       .order('created_at', { ascending: false }).limit(500)
     if (error) setNotice(error.message)
     else if (data) setSales(data)
+  }
+
+  async function loadSuppliers() {
+    if (!supabase || !session) return
+    const { data, error } = await supabase.from('suppliers').select('id,name,phone,email,created_at').order('name')
+    if (error) setNotice(error.message)
+    else if (data) setSuppliers(data)
+  }
+
+  async function loadPurchases() {
+    if (!supabase || !session) return
+    const { data, error } = await supabase.from('purchase_orders')
+      .select('id,purchase_no,supplier_reference,total,created_at,suppliers(name),purchase_items(id,product_no,product_name,size,colour,quantity,unit_cost,line_total)')
+      .order('created_at', { ascending: false }).limit(500)
+    if (error) setNotice(error.message)
+    else if (data) setPurchaseHistory(data)
+  }
+
+  async function saveSupplier(event: FormEvent) {
+    event.preventDefault()
+    const row = { name: supplierForm.name.trim(), phone: supplierForm.phone.trim() || null, email: supplierForm.email.trim() || null }
+    if (!row.name) { setNotice('Supplier name is required.'); return }
+    setBusy(true)
+    if (supabase && session) {
+      const { data, error } = await supabase.from('suppliers').insert(row).select('id,name,phone,email,created_at').single()
+      if (error) setNotice(error.message)
+      else { setSuppliers(current => [...current,data].sort((x,y)=>x.name.localeCompare(y.name))); setSupplierForm({name:'',phone:'',email:''}); setNotice('Supplier saved.') }
+    } else {
+      setSuppliers(current => [...current,{...row,id:crypto.randomUUID(),created_at:new Date().toISOString()}])
+      setSupplierForm({name:'',phone:'',email:''}); setNotice('Demo mode: supplier is temporary and not saved.')
+    }
+    setBusy(false)
+  }
+
+  async function receivePurchase(event: FormEvent) {
+    event.preventDefault()
+    if (!purchaseSupplier) { setNotice('Select a supplier.'); return }
+    const items = Object.entries(purchaseLines).filter(([,line]) => Number(line.quantity)>0).map(([variant_id,line]) => ({variant_id,quantity:Number(line.quantity),unit_cost:Number(line.unit_cost)}))
+    if (!items.length || items.some(i => !Number.isInteger(i.quantity) || !Number.isFinite(i.unit_cost) || i.unit_cost<0)) { setNotice('Enter a valid whole quantity and unit cost for at least one variant.'); return }
+    setBusy(true)
+    if (supabase && session) {
+      const { data, error } = await supabase.rpc('receive_purchase', {
+        p_supplier_id: purchaseSupplier, p_supplier_reference: purchaseReference.trim() || null,
+        p_purchase_date: purchaseDate, p_items: items,
+      })
+      if (error) { setNotice(error.message); setBusy(false); return }
+      setNotice(`Purchase ${data.purchase_no} received. Stock updated by the system.`)
+      await Promise.all([loadPurchases(),loadPOSVariants(),loadProducts()])
+    } else {
+      const selectedSupplier=suppliers.find(s=>s.id===purchaseSupplier)
+      const demoLines=items.map(i=>{const v=posVariants.find(x=>x.id===i.variant_id)!;return {id:crypto.randomUUID(),product_no:v.product_no,product_name:v.product_name,size:v.size,colour:v.colour,quantity:i.quantity,unit_cost:i.unit_cost,line_total:i.quantity*i.unit_cost}})
+      const demoPurchase={id:crypto.randomUUID(),purchase_no:`PO-DEMO-${Date.now()}`,supplier_reference:purchaseReference,suppliers:selectedSupplier,total:demoLines.reduce((n,i)=>n+i.line_total,0),created_at:new Date().toISOString(),purchase_items:demoLines}
+      setPurchaseHistory(current=>[demoPurchase,...current])
+      setPosVariants(current=>current.map(v=>{const line=items.find(i=>i.variant_id===v.id);return line?{...v,quantity:v.quantity+line.quantity}:v}))
+      setNotice('Demo purchase recorded locally; no database stock was changed.')
+    }
+    setPurchaseLines({});setPurchaseReference('');setBusy(false)
   }
 
   async function loadReturns() {
@@ -167,7 +232,7 @@ export default function App() {
     setPosVariants(mapped)
   }
 
-  useEffect(() => { if (session) { void loadProducts(); void loadPOSVariants(); void loadCustomers(); void loadSales(); void loadReturns() } }, [session])
+  useEffect(() => { if (session) { void loadProducts(); void loadPOSVariants(); void loadCustomers(); void loadSales(); void loadReturns(); void loadSuppliers(); void loadPurchases() } }, [session])
   useEffect(() => { if (activeProduct) void loadVariants(activeProduct.id) }, [activeProduct?.id, session])
 
   function addToCart(variant: POSVariant) {
@@ -381,6 +446,31 @@ export default function App() {
             </tbody></table></div>
           </article>
           {selectedSale && <div className="invoice-preview"><div className="heading"><div><p className="eyebrow">INVOICE DETAILS</p><h2>{selectedSale.invoice_no}</h2></div><button onClick={() => setSelectedSale(null)}>Close</button><button className="primary" onClick={() => window.print()}>Print</button></div><p>{new Date(selectedSale.created_at).toLocaleString()} · {selectedSale.payment_method}</p><div className="tablewrap"><table><thead><tr><th>PRODUCT</th><th>SIZE / COLOUR</th><th>QTY</th><th>UNIT PRICE</th><th>LINE TOTAL</th></tr></thead><tbody>{(selectedSale.sale_items || []).map((i:any)=><tr key={i.id}><td>{i.product_name}<small>{i.product_no} · {i.sku}</small></td><td>{i.size} / {i.colour}</td><td>{i.quantity}</td><td>{money(Number(i.unit_price))}</td><td>{money(Number(i.line_total))}</td></tr>)}</tbody></table></div><p>Subtotal: {money(Number(selectedSale.subtotal))} · Discount: {money(Number(selectedSale.discount))} · <b>Total: {money(Number(selectedSale.total))}</b></p><p>Received: {money(Number(selectedSale.amount_received))} · Change: {money(Number(selectedSale.change_amount))}</p></div>}
+        </> : page === 'Purchases' ? <>
+          <div className="heading"><div><p className="eyebrow">INBOUND INVENTORY</p><h1>Purchases & Receiving</h1><p>Record supplier deliveries and add received quantities to stock.</p></div><button onClick={() => {void loadPurchases();void loadPOSVariants()}}>Refresh</button></div>
+          <article className="purchase-form"><h3>Receive a supplier purchase</h3><form onSubmit={receivePurchase}>
+            <div className="purchase-meta"><label>Supplier<select required value={purchaseSupplier} onChange={e=>setPurchaseSupplier(e.target.value)}><option value="">Select supplier…</option>{suppliers.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select></label><label>Supplier reference<input value={purchaseReference} onChange={e=>setPurchaseReference(e.target.value)} placeholder="Supplier invoice / GRN no. (optional)" /></label><label>Purchase date<input type="date" value={purchaseDate} onChange={e=>setPurchaseDate(e.target.value)} required /></label></div>
+            <div className="tablewrap"><table><thead><tr><th>PRODUCT</th><th>SIZE / COLOUR</th><th>AVAILABLE</th><th>RECEIVE QTY</th><th>UNIT COST (LKR)</th></tr></thead><tbody>
+              {posVariants.map(v=><tr key={v.id}><td><b>{v.product_name}</b><small>{v.product_no} · {v.sku}</small></td><td>{v.size} / {v.colour}</td><td>{v.quantity}</td><td><input className="purchase-number" type="number" min="0" step="1" value={purchaseLines[v.id]?.quantity || ''} onChange={e=>setPurchaseLines(current=>({...current,[v.id]:{quantity:e.target.value,unit_cost:current[v.id]?.unit_cost ?? String(products.find(p=>p.id===v.product_id)?.cost_price ?? 0)}}))} /></td><td><input className="purchase-number" type="number" min="0" step="0.01" value={purchaseLines[v.id]?.unit_cost ?? ''} onChange={e=>setPurchaseLines(current=>({...current,[v.id]:{quantity:current[v.id]?.quantity || '',unit_cost:e.target.value}}))} /></td></tr>)}
+              {posVariants.length===0 && <tr><td colSpan={5}>Create products and size/colour variants before receiving stock.</td></tr>}
+            </tbody></table></div><button className="primary" disabled={busy || posVariants.length===0}>{busy?'Saving…':'Confirm Purchase & Add Stock'}</button>
+          </form></article>
+          <article><div className="toolbar"><h3>Purchase history ({purchaseHistory.length})</h3></div><div className="tablewrap"><table><thead><tr><th>DATE</th><th>PURCHASE NO.</th><th>SUPPLIER</th><th>SUPPLIER REF.</th><th>ITEM TYPES</th><th>TOTAL COST</th></tr></thead><tbody>
+            {purchaseHistory.map(p=>{const supplier=Array.isArray(p.suppliers)?p.suppliers[0]:p.suppliers;return <tr key={p.id}><td>{new Date(p.created_at).toLocaleDateString()}</td><td><b>{p.purchase_no}</b></td><td>{supplier?.name || '—'}</td><td>{p.supplier_reference || '—'}</td><td>{p.purchase_items?.length || 0}</td><td>{money(Number(p.total))}</td></tr>})}
+            {purchaseHistory.length===0&&<tr><td colSpan={6}>No purchases recorded yet.</td></tr>}
+          </tbody></table></div></article>
+        </> : page === 'Suppliers' ? <>
+          <div className="heading"><div><p className="eyebrow">VENDOR DIRECTORY</p><h1>Suppliers</h1><p>Maintain supplier contact details for purchase receiving.</p></div></div>
+          <div className="customer-layout"><article><h3>Add supplier</h3><form onSubmit={saveSupplier} className="customer-form">
+            <label>Supplier name<input required value={supplierForm.name} onChange={e=>setSupplierForm({...supplierForm,name:e.target.value})}/></label>
+            <label>Phone number<input value={supplierForm.phone} onChange={e=>setSupplierForm({...supplierForm,phone:e.target.value})}/></label>
+            <label>Email address<input type="email" value={supplierForm.email} onChange={e=>setSupplierForm({...supplierForm,email:e.target.value})}/></label>
+            <button className="primary" disabled={busy}>{busy?'Saving…':'Save supplier'}</button>
+          </form></article><article><div className="toolbar"><h3>Supplier list ({suppliers.length})</h3><input placeholder="Search supplier / phone / email…" value={supplierQuery} onChange={e=>setSupplierQuery(e.target.value)}/><button onClick={()=>void loadSuppliers()}>Refresh</button></div>
+            <div className="tablewrap"><table><thead><tr><th>SUPPLIER</th><th>PHONE</th><th>EMAIL</th><th>PURCHASES</th><th>TOTAL PURCHASED</th></tr></thead><tbody>
+              {suppliers.filter(s=>`${s.name} ${s.phone||''} ${s.email||''}`.toLowerCase().includes(supplierQuery.toLowerCase())).map(s=>{const ps=purchaseHistory.filter(p=>{const linked=Array.isArray(p.suppliers)?p.suppliers[0]:p.suppliers;return linked?.id===s.id});return <tr key={s.id}><td><b>{s.name}</b></td><td>{s.phone||'—'}</td><td>{s.email||'—'}</td><td>{ps.length}</td><td>{money(ps.reduce((sum,p)=>sum+Number(p.total),0))}</td></tr>})}
+              {suppliers.length===0&&<tr><td colSpan={5}>No suppliers added yet.</td></tr>}
+            </tbody></table></div></article></div>
         </> : page === 'Returns & Exchanges' ? <>
           <div className="heading"><div><p className="eyebrow">AFTER-SALES</p><h1>Returns & Exchanges</h1><p>Process item returns against an original invoice and record refunds.</p></div><button onClick={() => { void loadSales(); void loadReturns() }}>Refresh</button></div>
           <article className="return-workflow">
