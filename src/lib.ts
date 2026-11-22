@@ -10,6 +10,10 @@ export type Product = {
   id: string; product_no: string; sku: string; name: string; category: string | null
   selling_price: number; cost_price: number; active: boolean
 }
+export type ProductVariant = {
+  id: string; product_id: string; size: string; colour: string; barcode: string | null
+  quantity: number; reorder_level: number
+}
 export const money = (value: number) => new Intl.NumberFormat('en-LK', {
   style: 'currency', currency: 'LKR', maximumFractionDigits: 0
 }).format(value)
