@@ -100,6 +100,7 @@ returns uuid language plpgsql security definer set search_path = public as $
 declare v_employee_id uuid; v_attendance_id uuid;
 begin
   if auth.uid() is null then raise exception 'Authentication required'; end if;
+  if p_work_date <> (now() at time zone 'Asia/Colombo')::date then raise exception 'Employees can only punch attendance for the current Sri Lankan date'; end if;
   select id into v_employee_id from public.employees
    where auth_user_id=auth.uid() and status='Active' limit 1;
   if v_employee_id is null then raise exception 'No active employee profile is linked to this login'; end if;
