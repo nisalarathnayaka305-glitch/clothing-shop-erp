@@ -1,10 +1,18 @@
 # Clothing Shop ERP
 
-A React + TypeScript + Vite starter for a single clothing shop. Currency: LKR.
+A single-shop clothing retail ERP built with React, TypeScript, Vite and Supabase. Currency: LKR.
 
-> This is an early starter, not a production-ready ERP. Dashboard figures are demo data. POS checkout, stock posting, full reports, employee management and online ordering still need implementation.
+## Implemented modules
 
-## Run locally
+- Product catalogue, product numbers, variants and stock balances
+- Point of Sale, sales history, invoices and returns
+- Suppliers, purchase receiving and stock movements
+- Expense register
+- Employee directory, role-based access, attendance and basic payroll
+- Supplier accounts and invoice-level supplier payments
+- Customer credit sales, accounts receivable and payment collection
+
+## Local development
 
 ```bash
 npm install
@@ -12,15 +20,60 @@ cp .env.example .env.local
 npm run dev
 ```
 
-## Supabase setup
+The example environment file is configured for the linked Supabase project. The publishable key is intended for browser use; never place a Supabase `service_role` or secret key in frontend code.
 
-1. Create a Supabase project.
-2. Add `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` to `.env.local`.
-3. Run `supabase/migrations/0001_initial_schema.sql` in the Supabase SQL Editor.
-4. Configure and test Supabase Auth and row-level security before storing real business data.
+## Supabase database setup
 
-Never put the Supabase `service_role` key in frontend code or commit it to GitHub.
+The linked project has migrations `0001` through `0016` applied. For a fresh environment, apply every file in `supabase/migrations` in numeric order.
 
-## Vercel
+The migrations create 19 public tables, all with Row Level Security enabled. Migration 0015 hardens nullable employee-role checks and removes anonymous execution from public functions. Migration 0016 removes direct RPC execution from trigger-only helper functions.
 
-Import the repository into Vercel. Build command: `npm run build`; output directory: `dist`. Configure the two Vite Supabase environment variables in Vercel.
+## First owner account (required once)
+
+The application uses Supabase email/password sign-in. It does not provide public self-registration.
+
+1. In Supabase Dashboard, open **Authentication → Users → Add user** and create the shop owner's login.
+2. Copy the exact email address used for that Auth user.
+3. In the SQL Editor, run the following once, replacing the sample name and email:
+
+```sql
+insert into public.employees (full_name, email, auth_user_id, role, status)
+select 'Shop Owner', email, id, 'Admin', 'Active'
+from auth.users
+where lower(email) = lower('owner@example.com')
+on conflict (auth_user_id) do update
+set full_name = excluded.full_name,
+    email = excluded.email,
+    role = 'Admin',
+    status = 'Active';
+```
+
+4. Sign in to the ERP with that email and password.
+5. Add other staff through the Employee Management module and assign only the roles they need.
+
+Do not share passwords or secret API keys in chat or commit them to GitHub.
+
+## Build
+
+```bash
+npm run build
+```
+
+A GitHub Actions workflow also runs the production build on pushes and pull requests.
+
+## Vercel deployment
+
+Import this repository into Vercel. Set:
+
+- Build command: `npm run build`
+- Output directory: `dist`
+- Environment variables: `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY`
+
+Use the same linked Supabase project URL and publishable key from `.env.example`. Configure environment variables for Preview and Production deployments as appropriate.
+
+## Production readiness notes
+
+- Create the first owner Auth user and bootstrap the Admin employee before staff sign-in.
+- Verify sign-in, employee role assignment and each workflow using real test accounts.
+- Payroll is a basic salary register, not a statutory Sri Lankan EPF/ETF/PAYE or overtime calculation engine.
+- Take regular database backups and test restore procedures before storing live shop data.
