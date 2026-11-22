@@ -11,6 +11,10 @@ const demoVariants: ProductVariant[] = [
   { id: 'v1', product_id: '1', size: 'M', colour: 'Black', barcode: '200000000001', quantity: 12, reorder_level: 5 },
   { id: 'v2', product_id: '1', size: 'L', colour: 'Black', barcode: '200000000002', quantity: 3, reorder_level: 5 },
 ]
+type POSVariant = ProductVariant & { product_no: string; product_name: string; sku: string; selling_price: number }
+type CartLine = { variant_id: string; product_no: string; name: string; sku: string; size: string; colour: string; unit_price: number; quantity: number; available: number }
+type Invoice = { invoice_no: string; subtotal: number; discount: number; total: number; amount_received: number; change_amount: number; payment_method: string; created_at: string; items: CartLine[] }
+
 const navigation = ['Overview', 'Point of Sale', 'Products & Stock', 'Purchases', 'Customers', 'Suppliers', 'Expenses', 'Reports', 'Employees', 'Settings']
 
 export default function App() {
@@ -29,6 +33,14 @@ export default function App() {
   const [activeProduct, setActiveProduct] = useState<Product | null>(null)
   const [variantForm, setVariantForm] = useState({ size: 'M', colour: '', barcode: '', quantity: '0', reorder_level: '5' })
   const [adjustments, setAdjustments] = useState<Record<string, { change: string; reason: string }>>({})
+  const [posVariants, setPosVariants] = useState<POSVariant[]>(demoVariants.map(v => { const p = demo.find(item => item.id === v.product_id)!; return { ...v, product_no: p.product_no, product_name: p.name, sku: p.sku, selling_price: p.selling_price } }))
+  const [posQuery, setPosQuery] = useState('')
+  const [barcodeInput, setBarcodeInput] = useState('')
+  const [cart, setCart] = useState<CartLine[]>([])
+  const [discount, setDiscount] = useState('0')
+  const [paymentMethod, setPaymentMethod] = useState('Cash')
+  const [amountReceived, setAmountReceived] = useState('')
+  const [lastInvoice, setLastInvoice] = useState<Invoice | null>(null)
 
   useEffect(() => {
     if (!supabase) return
@@ -68,8 +80,94 @@ export default function App() {
     setVariants(current => [...current.filter(v => v.product_id !== productId), ...mapped])
   }
 
-  useEffect(() => { if (session) void loadProducts() }, [session])
+  async function loadPOSVariants() {
+    if (!supabase || !session) return
+    const { data, error } = await supabase.from('product_variants')
+      .select('id,product_id,size,colour,barcode,products!inner(id,product_no,name,sku,selling_price,active),stock_balances(quantity,reorder_level)')
+      .eq('products.active', true).order('size')
+    if (error) { setNotice(error.message); return }
+    const mapped = (data || []).map((row: any) => {
+      const product = Array.isArray(row.products) ? row.products[0] : row.products
+      const stock = Array.isArray(row.stock_balances) ? row.stock_balances[0] : row.stock_balances
+      return { id: row.id, product_id: row.product_id, size: row.size, colour: row.colour, barcode: row.barcode,
+        quantity: stock?.quantity ?? 0, reorder_level: stock?.reorder_level ?? 5,
+        product_no: product?.product_no ?? '', product_name: product?.name ?? '', sku: product?.sku ?? '',
+        selling_price: Number(product?.selling_price ?? 0) } as POSVariant
+    })
+    setPosVariants(mapped)
+  }
+
+  useEffect(() => { if (session) { void loadProducts(); void loadPOSVariants() } }, [session])
   useEffect(() => { if (activeProduct) void loadVariants(activeProduct.id) }, [activeProduct?.id, session])
+
+  function addToCart(variant: POSVariant) {
+    if (variant.quantity < 1) { setNotice('This size and colour is out of stock.'); return }
+    setCart(current => {
+      const existing = current.find(line => line.variant_id === variant.id)
+      if (existing) {
+        if (existing.quantity >= variant.quantity) { setNotice('Not enough stock available.'); return current }
+        return current.map(line => line.variant_id === variant.id ? { ...line, quantity: line.quantity + 1 } : line)
+      }
+      return [...current, { variant_id: variant.id, product_no: variant.product_no, name: variant.product_name, sku: variant.sku,
+        size: variant.size, colour: variant.colour, unit_price: variant.selling_price, quantity: 1, available: variant.quantity }]
+    })
+    setNotice('')
+  }
+
+  function addBarcode(event: FormEvent) {
+    event.preventDefault()
+    const code = barcodeInput.trim().toLowerCase()
+    const matches = posVariants.filter(v => (v.barcode || '').toLowerCase() === code || v.sku.toLowerCase() === code || v.product_no.toLowerCase() === code)
+    if (matches.length === 0) { setNotice('No matching variant found. Check the barcode or product number.'); return }
+    if (matches.length > 1) { setNotice('This code matches multiple sizes/colours. Select the correct variant from the product list.'); return }
+    addToCart(matches[0])
+    setBarcodeInput('')
+  }
+
+  function updateCartQuantity(variantId: string, quantity: number) {
+    if (quantity <= 0) { setCart(current => current.filter(line => line.variant_id !== variantId)); return }
+    const available = posVariants.find(v => v.id === variantId)?.quantity ?? 0
+    if (quantity > available) { setNotice('Quantity exceeds available stock.'); return }
+    setCart(current => current.map(line => line.variant_id === variantId ? { ...line, quantity } : line))
+  }
+
+  const cartSubtotal = cart.reduce((sum, line) => sum + line.unit_price * line.quantity, 0)
+  const discountValue = Math.max(0, Number(discount) || 0)
+  const cartTotal = Math.max(0, cartSubtotal - discountValue)
+
+  async function completeSale(event: FormEvent) {
+    event.preventDefault()
+    if (!cart.length) { setNotice('Add at least one item to the cart.'); return }
+    if (discountValue > cartSubtotal) { setNotice('Discount cannot exceed the subtotal.'); return }
+    const received = Number(amountReceived)
+    if (!Number.isFinite(received) || received < cartTotal) { setNotice('Amount received must be equal to or greater than the total.'); return }
+    if (paymentMethod !== 'Cash' && received !== cartTotal) { setNotice('For card or bank transfer, enter the exact sale total.'); return }
+    setBusy(true)
+    const invoiceItems = cart.map(line => ({ ...line }))
+    if (supabase && session) {
+      const { data, error } = await supabase.rpc('complete_sale', {
+        p_items: cart.map(line => ({ variant_id: line.variant_id, quantity: line.quantity })),
+        p_discount: discountValue,
+        p_payment_method: paymentMethod,
+        p_amount_received: received,
+      })
+      if (error) { setNotice(error.message); setBusy(false); return }
+      const result = data as any
+      setLastInvoice({ invoice_no: result.invoice_no, subtotal: Number(result.subtotal), discount: Number(result.discount),
+        total: Number(result.total), amount_received: Number(result.amount_received), change_amount: Number(result.change_amount),
+        payment_method: result.payment_method, created_at: result.created_at, items: invoiceItems })
+      await loadPOSVariants()
+    } else {
+      setPosVariants(current => current.map(v => {
+        const sold = cart.find(line => line.variant_id === v.id)
+        return sold ? { ...v, quantity: v.quantity - sold.quantity } : v
+      }))
+      setLastInvoice({ invoice_no: `DEMO-${Date.now()}`, subtotal: cartSubtotal, discount: discountValue, total: cartTotal,
+        amount_received: received, change_amount: received - cartTotal, payment_method: paymentMethod, created_at: new Date().toISOString(), items: invoiceItems })
+      setNotice('Demo sale completed locally only. No data was saved to Supabase.')
+    }
+    setCart([]); setDiscount('0'); setAmountReceived(''); setBusy(false)
+  }
 
   async function signIn(event: FormEvent) {
     event.preventDefault()
@@ -182,6 +280,25 @@ export default function App() {
               <tbody>{filtered.map(p => <tr key={p.id}><td><b>{p.product_no}</b></td><td>{p.name}</td><td>{p.sku}</td><td>{p.category}</td><td>{money(p.selling_price)}</td><td>{money(p.cost_price)}</td><td>{variants.filter(v => v.product_id === p.id).length}</td><td><button className="small-action" onClick={() => setActiveProduct(p)}>Manage stock</button></td></tr>)}
               {filtered.length === 0 && <tr><td colSpan={8}>No products found.</td></tr>}</tbody></table></div>
           </article>
+        </> : page === 'Point of Sale' ? <>
+          <div className="heading"><div><p className="eyebrow">CHECKOUT</p><h1>Point of Sale</h1><p>Scan a barcode or select a size and colour variant.</p></div><span className={supabaseConfigured ? 'ok' : 'demo'}>{supabaseConfigured ? 'Live inventory' : 'Demo inventory'}</span></div>
+          <div className="pos-layout">
+            <div className="pos-products">
+              <form className="barcode-form" onSubmit={addBarcode}><input autoFocus aria-label="Barcode, SKU or product number" placeholder="Scan barcode / enter SKU / Product No." value={barcodeInput} onChange={e => setBarcodeInput(e.target.value)} /><button className="primary">Add</button></form>
+              <input className="pos-search" placeholder="Search products, product no. or colour…" value={posQuery} onChange={e => setPosQuery(e.target.value)} />
+              <div className="pos-grid">{posVariants.filter(v => `${v.product_no} ${v.product_name} ${v.sku} ${v.size} ${v.colour}`.toLowerCase().includes(posQuery.toLowerCase())).map(v =>
+                <article className="pos-item" key={v.id}><small>{v.product_no} · {v.sku}</small><h3>{v.product_name}</h3><p>{v.size} / {v.colour}</p><b>{money(v.selling_price)}</b><div className="pos-item-bottom"><span>{v.quantity} in stock</span><button disabled={v.quantity < 1} onClick={() => addToCart(v)}>Add +</button></div></article>)}
+                {posVariants.length === 0 && <p className="muted">No variants with stock data found. Add products and size/colour variants first.</p>}
+              </div>
+            </div>
+            <article className="cart-panel"><h2>Current bill</h2><p className="muted">{cart.length} item type(s)</p>
+              <div className="cart-lines">{cart.map(line => <div className="cart-line" key={line.variant_id}><div><b>{line.name}</b><small>{line.product_no} · {line.size} / {line.colour}</small><small>{money(line.unit_price)} each</small></div><div className="qty-control"><button type="button" onClick={() => updateCartQuantity(line.variant_id,line.quantity-1)}>−</button><span>{line.quantity}</span><button type="button" onClick={() => updateCartQuantity(line.variant_id,line.quantity+1)}>+</button></div><b>{money(line.unit_price*line.quantity)}</b></div>)}
+                {cart.length === 0 && <p className="muted">Your cart is empty. Add products to begin.</p>}</div>
+              <div className="bill-summary"><div><span>Subtotal</span><b>{money(cartSubtotal)}</b></div><label>Discount (LKR)<input type="number" min="0" step="0.01" value={discount} onChange={e => setDiscount(e.target.value)} /></label><div className="grand-total"><span>Total</span><strong>{money(cartTotal)}</strong></div></div>
+              <form onSubmit={completeSale} className="checkout-form"><label>Payment method<select value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)}><option>Cash</option><option>Card</option><option>Bank Transfer</option></select></label><label>Amount received (LKR)<input required type="number" min={cartTotal} step="0.01" value={amountReceived} onChange={e => setAmountReceived(e.target.value)} placeholder={String(cartTotal)} /></label><p className="change-due">Change: <b>{money(Math.max(0,(Number(amountReceived)||0)-cartTotal))}</b></p><button className="primary full" disabled={busy || cart.length===0}>{busy ? 'Processing…' : 'Complete Sale'}</button></form>
+            </article>
+          </div>
+          {lastInvoice && <div className="invoice-preview"><div className="heading"><div><p className="eyebrow">SALE COMPLETED</p><h2>Invoice {lastInvoice.invoice_no}</h2></div><button className="primary" onClick={() => window.print()}>Print invoice</button></div><p>{new Date(lastInvoice.created_at).toLocaleString()}</p><div className="tablewrap"><table><thead><tr><th>ITEM</th><th>SIZE / COLOUR</th><th>QTY</th><th>PRICE</th><th>AMOUNT</th></tr></thead><tbody>{lastInvoice.items.map((line,i)=><tr key={i}><td>{line.name}<small>{line.product_no}</small></td><td>{line.size} / {line.colour}</td><td>{line.quantity}</td><td>{money(line.unit_price)}</td><td>{money(line.unit_price*line.quantity)}</td></tr>)}</tbody></table></div><p>Subtotal: {money(lastInvoice.subtotal)} · Discount: {money(lastInvoice.discount)} · <b>Total: {money(lastInvoice.total)}</b></p><p>Paid by {lastInvoice.payment_method} · Received {money(lastInvoice.amount_received)} · Change {money(lastInvoice.change_amount)}</p></div>}
         </> : <article className="empty"><h2>{page}</h2><p>This module is planned for a later development phase.</p></article>}
       </section>
     </main>
