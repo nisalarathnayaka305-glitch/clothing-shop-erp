@@ -317,6 +317,7 @@ export default function App() {
 
   async function saveExpense(event: FormEvent) {
     event.preventDefault()
+    if (expenseForm.category === 'Supplier Payment') { setNotice('Use Supplier Accounts to record supplier payments so invoice balances are updated correctly.'); return }
     const amount = Number(expenseForm.amount)
     if (!expenseForm.description.trim() || !Number.isFinite(amount) || amount <= 0 || !expenseForm.expense_date) {
       setNotice('Enter an expense description, a valid amount and date.'); return
@@ -910,7 +911,7 @@ export default function App() {
             <article><small>Transactions</small><h2>{expenses.length}</h2></article>
           </div>
           <article className="expense-entry"><h3>Record an expense</h3><form onSubmit={saveExpense} className="expense-form">
-            <label>Category<select value={expenseForm.category} onChange={e=>setExpenseForm({...expenseForm,category:e.target.value,supplier_id:''})}>{['General','Supplier Payment','Employee Salary','Wages','Rent','Electricity','Water','Internet & Phone','Transport','Packaging','Maintenance','Marketing','Bank Charges','Other'].map(x=><option key={x}>{x}</option>)}</select></label>
+            <label>Category<select value={expenseForm.category} onChange={e=>setExpenseForm({...expenseForm,category:e.target.value,supplier_id:''})}>{['General','Employee Salary','Wages','Rent','Electricity','Water','Internet & Phone','Transport','Packaging','Maintenance','Marketing','Bank Charges','Other'].map(x=><option key={x}>{x}</option>)}</select></label>
             <label>Description<input required value={expenseForm.description} onChange={e=>setExpenseForm({...expenseForm,description:e.target.value})} placeholder="What was this payment for?" /></label>
             <label>Amount (LKR)<input required type="number" min="0.01" step="0.01" value={expenseForm.amount} onChange={e=>setExpenseForm({...expenseForm,amount:e.target.value})} /></label>
             <label>Payment method<select value={expenseForm.payment_method} onChange={e=>setExpenseForm({...expenseForm,payment_method:e.target.value})}><option>Cash</option><option>Card</option><option>Bank Transfer</option><option>Cheque</option></select></label>
