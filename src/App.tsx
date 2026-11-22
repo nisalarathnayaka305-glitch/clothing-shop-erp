@@ -903,7 +903,51 @@ export default function App() {
           </article>
           <p className="muted">Figures use the latest 500 sales, 500 returns and 1,000 expenses loaded by this app. Estimated profit excludes supplier-payment entries to avoid treating inventory settlement as an operating expense. Confirm accounting treatment with your accountant.</p>
         </> : page === 'Reports' ? <>
-          <div className="heading"><div><p className="eyebrow">BUSINESS INTELLIGENCE</p><h1>Reports & Analytics</h1><p>Review sales, refunds, estimated profit, payment methods and product performance.</p></div><button onClick={()=>{void loadSales();void loadExpenses();void loadReturns();void loadPOSVariants()}}>Refresh reports</button></div>
+          <div className="heading"><div><p className="eyebrow">BUSINESS INTELLIGENCE</p><h1>Reports & Analytics</h1><p>Review sales, refunds, estimated profit, payment methods and product performance.</p></div><div className="toolbar"><button onClick={()=>{void loadSales();void loadExpenses();void loadReturns();void loadPOSVariants()}}>Refresh reports</button><button className="primary" onClick={() => {
+            const rows: (string | number)[][] = [
+              ['CLOTHING SHOP ERP - REPORTS & ANALYTICS'],
+              ['Period', reportStart, 'to', reportEnd],
+              [],
+              ['SUMMARY'],
+              ['Sales Subtotal', reportGrossSales],
+              ['Discounts', reportDiscounts],
+              ['Refunds', reportRefunds],
+              ['Net Sales', reportRevenue - reportRefunds],
+              ['Estimated Gross Profit', reportGrossProfit],
+              ['Operating Expenses', reportOperatingExpenses],
+              ['Estimated Net Profit', reportNetProfit],
+              [],
+              ['SALES BY PAYMENT METHOD'],
+              ['Payment Method', 'Transactions', 'Total'],
+              ...paymentBreakdown.map(x => [x.method, x.count, x.total] as (string | number)[]),
+              [],
+              ['EXPENSES BY CATEGORY'],
+              ['Category', 'Entries', 'Total'],
+              ...expenseBreakdown.map((x:any) => [x.category, x.count, x.total] as (string | number)[]),
+              [],
+              ['TOP-SELLING PRODUCTS'],
+              ['Product', 'Product No.', 'Units Sold', 'Sales Value'],
+              ...topProducts.map((x:any) => [x.name, x.productNo || '', x.quantity, x.revenue] as (string | number)[]),
+              [],
+              ['SALES TRANSACTIONS'],
+              ['Date', 'Invoice', 'Items', 'Payment Method', 'Amount'],
+              ...reportSales.map(s => [s.created_at, s.invoice_no, (s.sale_items || []).reduce((n:number,i:any)=>n+Number(i.quantity),0), s.payment_method, Number(s.total)] as (string | number)[])
+            ];
+            const csv = rows.map(row => row.map(value => {
+              let cell = String(value ?? '');
+              if (/^[=+@-]/.test(cell)) cell = "'" + cell;
+              return '"' + cell.replace(/"/g, '""') + '"';
+            }).join(',')).join('\\r\\n');
+            const blob = new Blob(['\\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `clothing-erp-report-${reportStart}-to-${reportEnd}.csv`;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            URL.revokeObjectURL(url);
+          }}>Export CSV</button></div></div>
           <article className="report-filter"><label>From<input type="date" value={reportStart} max={reportEnd} onChange={e=>setReportStart(e.target.value)}/></label><label>To<input type="date" value={reportEnd} min={reportStart} onChange={e=>setReportEnd(e.target.value)}/></label><button onClick={()=>{const d=new Date();setReportEnd(d.toISOString().slice(0,10));setReportStart(new Date(d.getFullYear(),d.getMonth(),1).toISOString().slice(0,10))}}>This month</button><button onClick={()=>{const d=new Date();setReportEnd(d.toISOString().slice(0,10));setReportStart(new Date(d.getFullYear(),0,1).toISOString().slice(0,10))}}>This year</button></article>
           <div className="stats report-stats">{[[ 'Sales Subtotal',money(reportGrossSales) ],[ 'Discounts',money(reportDiscounts) ],[ 'Refunds',money(reportRefunds) ],[ 'Net Sales',money(reportRevenue-reportRefunds) ],[ 'Gross Profit (Est.)',money(reportGrossProfit) ],[ 'Operating Expenses',money(reportOperatingExpenses) ],[ 'Net Profit (Est.)',money(reportNetProfit) ]].map(([label,value])=><article key={label}><small>{label}</small><h2>{value}</h2></article>)}</div>
           <div className="dashboard-grid">
