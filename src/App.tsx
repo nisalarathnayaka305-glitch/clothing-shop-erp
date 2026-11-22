@@ -815,7 +815,7 @@ export default function App() {
   const monthReturns = returns.filter(r=>String(r.created_at).slice(0,7)===monthKey)
   const monthRefunds = monthReturns.reduce((sum,r)=>sum+Number(r.refund_total),0)
   const monthCOGS = monthSales.reduce((sum,s)=>sum+(s.sale_items||[]).reduce((n:number,line:any)=>n+Number(line.unit_cost||0)*Number(line.quantity||0),0),0)
-    - monthReturns.filter(r=>r.restock_items).reduce((sum,r)=>sum+(r.sales_return_items||[]).reduce((n:number,line:any)=>{const sold=monthSales.flatMap(s=>s.sale_items||[]).find((x:any)=>x.id===line.sale_item_id);return n+Number(sold?.unit_cost||0)*Number(line.quantity||0)},0),0),0)
+    - monthReturns.filter(r=>r.restock_items).reduce((sum,r)=>sum+(r.sales_return_items||[]).reduce((n:number,line:any)=>{const sold=monthSales.flatMap(s=>s.sale_items||[]).find((x:any)=>x.id===line.sale_item_id);return n+Number(sold?.unit_cost||0)*Number(line.quantity||0)},0),0)
   const monthOperatingExpenses = expenses.filter(e=>String(e.expense_date).slice(0,7)===monthKey && e.category!=='Supplier Payment').reduce((sum,e)=>sum+Number(e.amount),0)
   const monthGrossProfit = monthRevenue-monthRefunds-monthCOGS
   const monthEstimatedProfit = monthGrossProfit-monthOperatingExpenses
@@ -827,7 +827,7 @@ export default function App() {
   const reportRevenue = reportSales.reduce((sum,s)=>sum+Number(s.total),0)
   const reportRefunds = reportReturns.reduce((sum,r)=>sum+Number(r.refund_total),0)
   const reportCOGS = reportSales.reduce((sum,s)=>sum+(s.sale_items||[]).reduce((n:number,line:any)=>n+Number(line.unit_cost||0)*Number(line.quantity||0),0),0)
-    - reportReturns.filter(r=>r.restock_items).reduce((sum,r)=>sum+(r.sales_return_items||[]).reduce((n:number,line:any)=>{const sold=reportSales.flatMap(s=>s.sale_items||[]).find((x:any)=>x.id===line.sale_item_id);return n+Number(sold?.unit_cost||0)*Number(line.quantity||0)},0),0),0)
+    - reportReturns.filter(r=>r.restock_items).reduce((sum,r)=>sum+(r.sales_return_items||[]).reduce((n:number,line:any)=>{const sold=reportSales.flatMap(s=>s.sale_items||[]).find((x:any)=>x.id===line.sale_item_id);return n+Number(sold?.unit_cost||0)*Number(line.quantity||0)},0),0)
   const reportOperatingExpenses = reportExpenses.filter(e=>e.category!=='Supplier Payment').reduce((sum,e)=>sum+Number(e.amount),0)
   const reportGrossProfit = reportRevenue-reportRefunds-reportCOGS
   const reportNetProfit = reportGrossProfit-reportOperatingExpenses
