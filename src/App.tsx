@@ -829,6 +829,42 @@ export default function App() {
     setBusy(false)
   }
 
+  const [lowStockOnly, setLowStockOnly] = useState(false)
+
+  function exportInventoryCSV() {
+    const rows = [['Product No','Product','SKU','Category','Size','Colour','Barcode','On Hand','Reorder Level','Selling Price','Cost Price']]
+    for (const product of products) {
+      const productVariants = variants.filter(v => v.product_id === product.id)
+      if (productVariants.length === 0) rows.push([product.product_no,product.name,product.sku,product.category || '', '', '', '', '0','5',String(product.selling_price),String(product.cost_price)])
+      for (const v of productVariants) rows.push([product.product_no,product.name,product.sku,product.category || '',v.size,v.colour,v.barcode || '',String(v.quantity),String(v.reorder_level),String(product.selling_price),String(product.cost_price)])
+    }
+    const csv = rows.map(row => row.map(value => { const cell=String(value ?? ''); return '"' + (/^[=+@-]/.test(cell) ? "'"+cell : cell).replace(/"/g,'""') + '"' }).join(',')).join('\\r\\n')
+    const url=URL.createObjectURL(new Blob(['\\uFEFF'+csv],{type:'text/csv;charset=utf-8;'})); const a=document.createElement('a'); a.href=url; a.download='clothing-erp-inventory.csv'; a.click(); URL.revokeObjectURL(url)
+  }
+
+  function printBarcodeLabels(product: Product, productVariants: ProductVariant[]) {
+    const escapeHtml = (value: unknown) => String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char] || char))
+    const labels = productVariants.map(v => `<div class="label"><strong>${escapeHtml(product.name)}</strong><span>${escapeHtml(product.product_no)} · ${escapeHtml(v.size)} / ${escapeHtml(v.colour)}</span><b>${escapeHtml(v.barcode || 'BARCODE NOT SET')}</b><small>${v.barcode ? 'Scan code / SKU' : 'Add a barcode before scanning'}</small></div>`).join('')
+    const win=window.open('', '_blank', 'width=900,height=650'); if (!win) { setNotice('Allow pop-ups to print barcode labels.'); return }
+    win.document.write(`<!doctype html><html><head><title>Product Labels</title><style>body{font-family:Arial;padding:12px}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.label{border:1px dashed #555;padding:12px;min-height:85px;display:flex;flex-direction:column;gap:5px;break-inside:avoid}.label strong{font-size:13px}.label span,.label small{font-size:10px}.label b{font-family:monospace;font-size:18px;letter-spacing:2px}@media print{@page{margin:6mm}.label{border:1px solid #aaa}}</style></head><body><div class="grid">${labels}</div><script>window.onload=()=>window.print()</script></body></html>`); win.document.close()
+  }
+
+  async function exportDataBackup() {
+    if (!supabase || !session) { setNotice('Sign in to export a database backup.'); return }
+    setBusy(true)
+    const tables = ['products','product_variants','stock_balances','stock_movements','customers','suppliers','sales','sale_items','sales_returns','sales_return_items','purchase_orders','purchase_items','supplier_payments','customer_payments','expenses','employees','employee_attendance','payroll_runs','payroll_items']
+    const backup: Record<string, unknown> = { exported_at: new Date().toISOString(), format_version: 1, tables: {} }
+    for (const table of tables) {
+      const { data, error } = await supabase.from(table).select('*').limit(10000)
+      if (error) { setNotice('Backup stopped at '+table+': '+error.message); setBusy(false); return }
+      ;(backup.tables as Record<string, unknown>)[table] = data || []
+    }
+    const blob = new Blob([JSON.stringify(backup,null,2)],{type:'application/json'})
+    const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='clothing-erp-backup-'+localBusinessDate()+'.json'; a.click(); URL.revokeObjectURL(url)
+    setNotice('Database data export downloaded. Store it securely; this file contains customer and employee information.')
+    setBusy(false)
+  }
+
   const filtered = products.filter(p => `${p.product_no} ${p.name} ${p.sku} ${p.category || ''}`.toLowerCase().includes(query.toLowerCase()))
   const todayKey = new Date().toLocaleDateString('en-CA')
   const monthKey = todayKey.slice(0,7)
@@ -1174,9 +1210,9 @@ export default function App() {
           </tbody></table></div></article>
         </> : page === 'Products & Stock' ? <>
           <div className="heading"><div><p className="eyebrow">CATALOGUE & INVENTORY</p><h1>Products & Stock</h1><p>Manage products, size/colour variants and stock quantities.</p></div><button className="primary" onClick={() => setShow(true)}>+ Add Product</button></div>
-          <article><div className="toolbar"><h3>Product catalogue ({products.length})</h3><input aria-label="Search products" placeholder="Search product no, name or SKU…" value={query} onChange={e => setQuery(e.target.value)} /><button onClick={() => void loadProducts()}>Refresh</button></div>
+          <article><div className="toolbar"><h3>Product catalogue ({products.length})</h3><input aria-label="Search products" placeholder="Search product no, name or SKU…" value={query} onChange={e => setQuery(e.target.value)} /><label className="inline-check"><input type="checkbox" checked={lowStockOnly} onChange={e=>setLowStockOnly(e.target.checked)} /> Low stock only</label><button onClick={exportInventoryCSV}>Export inventory CSV</button><button onClick={() => void loadProducts()}>Refresh</button></div>
             <div className="tablewrap"><table><thead><tr><th>PRODUCT NO.</th><th>PRODUCT</th><th>SKU</th><th>CATEGORY</th><th>SELLING PRICE</th><th>COST PRICE</th><th>VARIANTS</th><th>ACTION</th></tr></thead>
-              <tbody>{filtered.map(p => <tr key={p.id}><td><b>{p.product_no}</b></td><td>{p.name}</td><td>{p.sku}</td><td>{p.category}</td><td>{money(p.selling_price)}</td><td>{money(p.cost_price)}</td><td>{variants.filter(v => v.product_id === p.id).length}</td><td><button className="small-action" onClick={() => setActiveProduct(p)}>Manage stock</button></td></tr>)}
+              <tbody>{filtered.filter(p => !lowStockOnly || variants.some(v => v.product_id === p.id && v.quantity <= v.reorder_level)).map(p => <tr key={p.id}><td><b>{p.product_no}</b></td><td>{p.name}</td><td>{p.sku}</td><td>{p.category}</td><td>{money(p.selling_price)}</td><td>{money(p.cost_price)}</td><td>{variants.filter(v => v.product_id === p.id).length}</td><td><button className="small-action" onClick={() => setActiveProduct(p)}>Manage stock</button></td></tr>)}
               {filtered.length === 0 && <tr><td colSpan={8}>No products found.</td></tr>}</tbody></table></div>
           </article>
         </> : page === 'Point of Sale' ? <>
@@ -1214,6 +1250,11 @@ export default function App() {
               </tbody></table></div>
             </article>
           </div>
+        </> : page === 'Settings' ? <>
+          <div className="heading"><div><p className="eyebrow">SYSTEM ADMINISTRATION</p><h1>Settings & Data Backup</h1><p>Export operational data for secure offline retention.</p></div></div>
+          <article><h3>Database data export</h3><p className="muted">Downloads up to 10,000 rows per operational table in a JSON file. This is a data export, not a full Supabase point-in-time backup; it does not include authentication credentials, database schema, storage files or project settings.</p><button className="primary" disabled={busy || !['Admin'].includes(currentEmployeeRole||'')} onClick={()=>void exportDataBackup()}>{busy?'Preparing export…':'Download data backup (JSON)'}</button>{currentEmployeeRole!=='Admin'&&<p className="muted">Only Admin users can export the database data.</p>}</article>
+          <article><h3>Inventory tools</h3><p className="muted">Download product, size, colour, barcode and stock information for spreadsheet review.</p><button onClick={exportInventoryCSV}>Export inventory CSV</button></article>
+          <article><h3>Security reminder</h3><p className="muted">Keep downloaded backups in an access-controlled location. They may contain customer contact details, employee records and sales information.</p></article>
         </> : <article className="empty"><h2>{page}</h2><p>This module is planned for a later development phase.</p></article>}
       </section>
     </main>
@@ -1226,7 +1267,7 @@ export default function App() {
       <div className="actions"><button type="button" onClick={() => setShow(false)}>Cancel</button><button className="primary" disabled={busy}>{busy ? 'Saving…' : 'Save product'}</button></div>
     </form></div>}
     {activeProduct && <div className="overlay"><div className="variant-panel">
-      <div className="panel-heading"><div><p className="eyebrow">INVENTORY MANAGEMENT</p><h2>{activeProduct.name}</h2><p className="muted">{activeProduct.product_no} · SKU {activeProduct.sku}</p></div><button className="text-button" onClick={() => setActiveProduct(null)}>✕</button></div>
+      <div className="panel-heading"><div><p className="eyebrow">INVENTORY MANAGEMENT</p><h2>{activeProduct.name}</h2><p className="muted">{activeProduct.product_no} · SKU {activeProduct.sku}</p></div><div className="header-actions"><button onClick={() => printBarcodeLabels(activeProduct, variants.filter(v => v.product_id === activeProduct.id))} disabled={!variants.some(v => v.product_id === activeProduct.id)}>Print labels</button><button className="text-button" onClick={() => setActiveProduct(null)}>✕</button></div></div>
       <form className="variant-form" onSubmit={saveVariant}><h3>Add size / colour</h3>
         <div className="form-grid"><label>Size<select value={variantForm.size} onChange={e => setVariantForm({ ...variantForm, size: e.target.value })}>{['Free Size','XS','S','M','L','XL','XXL','XXXL'].map(s => <option key={s}>{s}</option>)}</select></label>
         <label>Colour<input required placeholder="e.g. Black" value={variantForm.colour} onChange={e => setVariantForm({ ...variantForm, colour: e.target.value })} /></label>
