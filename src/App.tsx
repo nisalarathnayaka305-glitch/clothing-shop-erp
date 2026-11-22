@@ -70,6 +70,11 @@ export default function App() {
   const [expenseMonth, setExpenseMonth] = useState(new Date().toISOString().slice(0,7))
   const [reportStart, setReportStart] = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0,10))
   const [reportEnd, setReportEnd] = useState(new Date().toISOString().slice(0,10))
+  const [employees, setEmployees] = useState<any[]>([])
+  const [currentEmployeeRole, setCurrentEmployeeRole] = useState<string | null>(null)
+  const [employeeQuery, setEmployeeQuery] = useState('')
+  const [employeeEditingId, setEmployeeEditingId] = useState<string | null>(null)
+  const [employeeForm, setEmployeeForm] = useState({ full_name: '', email: '', phone: '', job_title: '', department: '', employment_type: 'Full-time', hire_date: new Date().toISOString().slice(0,10), auth_user_id: '', role: 'Staff', status: 'Active', notes: '' })
 
   useEffect(() => {
     if (!supabase) return
@@ -86,6 +91,24 @@ export default function App() {
     })
     return () => { mounted = false; listener.subscription.unsubscribe() }
   }, [])
+
+  async function loadEmployees() {
+    if (!supabase || !session) return
+    const { data: ownProfile, error: ownError } = await supabase.from('employees')
+      .select('id,role,status,full_name').eq('auth_user_id', session.user.id).maybeSingle()
+    if (ownError) { setNotice(ownError.message); return }
+    const role = ownProfile?.status === 'Active' ? ownProfile.role : null
+    setCurrentEmployeeRole(role)
+    if (role === 'Admin' || role === 'Manager') {
+      const { data, error } = await supabase.from('employees')
+        .select('id,employee_no,full_name,email,phone,job_title,department,employment_type,hire_date,auth_user_id,role,status,notes,created_at')
+        .order('created_at', { ascending: false })
+      if (error) setNotice(error.message)
+      else if (data) setEmployees(data)
+    } else {
+      setEmployees(ownProfile ? [ownProfile] : [])
+    }
+  }
 
   async function loadProducts() {
     if (!supabase || !session) return
@@ -279,7 +302,7 @@ export default function App() {
     setPosVariants(mapped)
   }
 
-  useEffect(() => { if (session) { void loadProducts(); void loadPOSVariants(); void loadCustomers(); void loadSales(); void loadReturns(); void loadSuppliers(); void loadPurchases(); void loadExpenses() } }, [session])
+  useEffect(() => { if (session) { void loadProducts(); void loadPOSVariants(); void loadCustomers(); void loadSales(); void loadReturns(); void loadSuppliers(); void loadPurchases(); void loadExpenses(); void loadEmployees() } else { setEmployees([]); setCurrentEmployeeRole(null) } }, [session])
   useEffect(() => { if (activeProduct) void loadVariants(activeProduct.id) }, [activeProduct?.id, session])
 
   function addToCart(variant: POSVariant) {
@@ -373,6 +396,52 @@ export default function App() {
       setCustomers(current => [...current, customer]); setCustomerForm({ full_name: '', phone: '', email: '' }); setNotice('Demo mode: customer is temporary and not saved to Supabase.')
     }
     setBusy(false)
+  }
+
+  async function saveEmployee(event: FormEvent) {
+    event.preventDefault()
+    if (currentEmployeeRole !== 'Admin') { setNotice('Only an administrator can add or update employees.'); return }
+    if (!employeeForm.full_name.trim()) { setNotice('Employee name is required.'); return }
+    const row = {
+      full_name: employeeForm.full_name.trim(),
+      email: employeeForm.email.trim() || null,
+      phone: employeeForm.phone.trim() || null,
+      job_title: employeeForm.job_title.trim() || null,
+      department: employeeForm.department.trim() || null,
+      employment_type: employeeForm.employment_type,
+      hire_date: employeeForm.hire_date || null,
+      auth_user_id: employeeForm.auth_user_id.trim() || null,
+      role: employeeForm.role,
+      status: employeeForm.status,
+      notes: employeeForm.notes.trim() || null,
+    }
+    setBusy(true)
+    if (supabase && session) {
+      const request = employeeEditingId
+        ? supabase.from('employees').update(row).eq('id', employeeEditingId)
+        : supabase.from('employees').insert(row)
+      const { error } = await request
+      if (error) setNotice(error.message)
+      else {
+        setNotice(employeeEditingId ? 'Employee updated successfully.' : 'Employee added successfully.')
+        setEmployeeEditingId(null)
+        setEmployeeForm({ full_name: '', email: '', phone: '', job_title: '', department: '', employment_type: 'Full-time', hire_date: new Date().toISOString().slice(0,10), auth_user_id: '', role: 'Staff', status: 'Active', notes: '' })
+        await loadEmployees()
+      }
+    } else {
+      const local = { ...row, id: employeeEditingId || crypto.randomUUID(), employee_no: employees.find(e=>e.id===employeeEditingId)?.employee_no || `EMP-${String(employees.length+1).padStart(5,'0')}`, created_at: new Date().toISOString() }
+      setEmployees(current => employeeEditingId ? current.map(e=>e.id===employeeEditingId?local:e) : [local,...current])
+      setNotice('Demo mode: employee record is temporary.')
+      setEmployeeEditingId(null)
+      setEmployeeForm({ full_name: '', email: '', phone: '', job_title: '', department: '', employment_type: 'Full-time', hire_date: new Date().toISOString().slice(0,10), auth_user_id: '', role: 'Staff', status: 'Active', notes: '' })
+    }
+    setBusy(false)
+  }
+
+  function editEmployee(employee: any) {
+    setEmployeeEditingId(employee.id)
+    setEmployeeForm({ full_name: employee.full_name || '', email: employee.email || '', phone: employee.phone || '', job_title: employee.job_title || '', department: employee.department || '', employment_type: employee.employment_type || 'Full-time', hire_date: employee.hire_date || '', auth_user_id: employee.auth_user_id || '', role: employee.role || 'Staff', status: employee.status || 'Active', notes: employee.notes || '' })
+    window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
   async function signIn(event: FormEvent) {
@@ -548,6 +617,37 @@ export default function App() {
             {reportSales.length===0&&<tr><td colSpan={5}>No sales in this period.</td></tr>}
           </tbody></table></div></article>
           <p className="muted">Reports use the latest 500 sales, 500 returns and 1,000 expenses loaded by this app. Profit is estimated from recorded sale-item unit costs and restocked returns; supplier-payment expenses are excluded from operating expenses. Export and full accounting reconciliation are not included in this release.</p>
+        </> : page === 'Employees' ? <>
+          <div className="heading"><div><p className="eyebrow">TEAM & ACCESS CONTROL</p><h1>Employee Management</h1><p>Maintain staff details and connect each employee to a Supabase login account.</p></div><button onClick={()=>void loadEmployees()}>Refresh</button></div>
+          {currentEmployeeRole !== 'Admin' && currentEmployeeRole !== 'Manager' ? <article>
+            <h3>Administrator setup required</h3>
+            <p>Your current login is not linked to an active employee profile with Admin or Manager access. Ask the shop owner to complete the one-time administrator setup described in <code>supabase/migrations/0010_employee_management.sql</code>.</p>
+            <p className="muted">Employee records and role changes are protected by Supabase Row Level Security. Do not disable those policies to make this screen work.</p>
+          </article> : <>
+            {currentEmployeeRole === 'Admin' && <article className="employee-entry"><div className="toolbar"><h3>{employeeEditingId ? 'Update employee' : 'Add new employee'}</h3>{employeeEditingId && <button type="button" onClick={()=>{setEmployeeEditingId(null);setEmployeeForm({ full_name: '', email: '', phone: '', job_title: '', department: '', employment_type: 'Full-time', hire_date: new Date().toISOString().slice(0,10), auth_user_id: '', role: 'Staff', status: 'Active', notes: '' })}}>Cancel edit</button>}</div>
+              <form className="employee-form" onSubmit={saveEmployee}>
+                <label>Full name<input required value={employeeForm.full_name} onChange={e=>setEmployeeForm({...employeeForm,full_name:e.target.value})}/></label>
+                <label>Email<input type="email" value={employeeForm.email} onChange={e=>setEmployeeForm({...employeeForm,email:e.target.value})}/></label>
+                <label>Phone<input value={employeeForm.phone} onChange={e=>setEmployeeForm({...employeeForm,phone:e.target.value})}/></label>
+                <label>Job title<input value={employeeForm.job_title} onChange={e=>setEmployeeForm({...employeeForm,job_title:e.target.value})} placeholder="e.g. Sales Assistant"/></label>
+                <label>Department<input value={employeeForm.department} onChange={e=>setEmployeeForm({...employeeForm,department:e.target.value})} placeholder="e.g. Retail"/></label>
+                <label>Employment type<select value={employeeForm.employment_type} onChange={e=>setEmployeeForm({...employeeForm,employment_type:e.target.value})}>{['Full-time','Part-time','Contract','Temporary'].map(x=><option key={x}>{x}</option>)}</select></label>
+                <label>Hire date<input type="date" value={employeeForm.hire_date} onChange={e=>setEmployeeForm({...employeeForm,hire_date:e.target.value})}/></label>
+                <label>System role<select value={employeeForm.role} onChange={e=>setEmployeeForm({...employeeForm,role:e.target.value})}>{['Admin','Manager','Cashier','Staff'].map(x=><option key={x}>{x}</option>)}</select></label>
+                <label>Status<select value={employeeForm.status} onChange={e=>setEmployeeForm({...employeeForm,status:e.target.value})}><option>Active</option><option>Inactive</option></select></label>
+                <label className="employee-wide">Supabase Auth User ID<input value={employeeForm.auth_user_id} onChange={e=>setEmployeeForm({...employeeForm,auth_user_id:e.target.value})} placeholder="Paste the Auth user UUID after creating their login"/></label>
+                <label className="employee-wide">Notes<textarea rows={2} value={employeeForm.notes} onChange={e=>setEmployeeForm({...employeeForm,notes:e.target.value})}/></label>
+                <div className="employee-wide"><button className="primary" disabled={busy}>{busy?'Saving…':employeeEditingId?'Update employee':'Save employee'}</button></div>
+              </form>
+              <p className="muted">Create login accounts in Supabase Dashboard → Authentication → Users. Then copy the user's UUID into the Auth User ID field. This app does not create passwords or send invitations.</p>
+            </article>}
+            <article><div className="toolbar"><div><h3>Employee directory ({employees.length})</h3><p className="muted">Your access level: {currentEmployeeRole}</p></div><input placeholder="Search name, role, department or phone…" value={employeeQuery} onChange={e=>setEmployeeQuery(e.target.value)}/></div>
+              <div className="tablewrap"><table><thead><tr><th>EMPLOYEE NO.</th><th>EMPLOYEE</th><th>CONTACT</th><th>DEPARTMENT / TITLE</th><th>ROLE</th><th>STATUS</th>{currentEmployeeRole==='Admin'&&<th>ACTION</th>}</tr></thead><tbody>
+                {employees.filter(e=>`${e.employee_no||''} ${e.full_name||''} ${e.email||''} ${e.phone||''} ${e.department||''} ${e.job_title||''} ${e.role||''}`.toLowerCase().includes(employeeQuery.toLowerCase())).map(e=><tr key={e.id}><td><b>{e.employee_no||'—'}</b></td><td>{e.full_name}<small>{e.email||'No email recorded'}</small></td><td>{e.phone||'—'}</td><td>{e.department||'—'}<small>{e.job_title||''}</small></td><td><span className="employee-role">{e.role}</span>{!e.auth_user_id&&<small>Login not linked</small>}</td><td><span className={e.status==='Active'?'stock-ok':'stock-low'}>{e.status}</span></td>{currentEmployeeRole==='Admin'&&<td><button className="small-action" onClick={()=>editEmployee(e)}>Edit</button></td>}</tr>)}
+                {employees.filter(e=>`${e.employee_no||''} ${e.full_name||''} ${e.email||''} ${e.phone||''} ${e.department||''} ${e.job_title||''} ${e.role||''}`.toLowerCase().includes(employeeQuery.toLowerCase())).length===0&&<tr><td colSpan={currentEmployeeRole==='Admin'?7:6}>No employees found.</td></tr>}
+              </tbody></table></div>
+            </article>
+          </>}
         </> : page === 'Sales History' ? <>
           <div className="heading"><div><p className="eyebrow">TRANSACTIONS</p><h1>Sales History</h1><p>Search invoices and review completed sales.</p></div><button onClick={() => void loadSales()}>Refresh</button></div>
           <article>
