@@ -68,6 +68,8 @@ export default function App() {
   const [expenseQuery, setExpenseQuery] = useState('')
   const [expenseCategoryFilter, setExpenseCategoryFilter] = useState('All')
   const [expenseMonth, setExpenseMonth] = useState(new Date().toISOString().slice(0,7))
+  const [reportStart, setReportStart] = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0,10))
+  const [reportEnd, setReportEnd] = useState(new Date().toISOString().slice(0,10))
 
   useEffect(() => {
     if (!supabase) return
@@ -118,7 +120,7 @@ export default function App() {
   async function loadSales() {
     if (!supabase || !session) return
     const { data, error } = await supabase.from('sales')
-      .select('id,invoice_no,subtotal,discount,total,payment_method,amount_received,change_amount,created_at,customers(id,full_name,phone),sale_items(id,product_no,product_name,sku,size,colour,quantity,unit_price,line_total)')
+      .select('id,invoice_no,subtotal,discount,total,payment_method,amount_received,change_amount,created_at,customers(id,full_name,phone),sale_items(id,product_no,product_name,sku,size,colour,quantity,unit_price,unit_cost,line_total)')
       .order('created_at', { ascending: false }).limit(500)
     if (error) setNotice(error.message)
     else if (data) setSales(data)
@@ -224,7 +226,7 @@ export default function App() {
   async function loadReturns() {
     if (!supabase || !session) return
     const { data, error } = await supabase.from('sales_returns')
-      .select('id,return_no,sale_id,refund_total,refund_method,reason,restock_items,created_at,sales(invoice_no),sales_return_items(id,product_no,product_name,size,colour,quantity,unit_price,line_total)')
+      .select('id,return_no,sale_id,refund_total,refund_method,reason,restock_items,created_at,sales(invoice_no),sales_return_items(id,sale_item_id,product_no,product_name,size,colour,quantity,unit_price,line_total)')
       .order('created_at', { ascending: false }).limit(500)
     if (error) setNotice(error.message)
     else if (data) setReturns(data)
@@ -457,7 +459,38 @@ export default function App() {
   }
 
   const filtered = products.filter(p => `${p.product_no} ${p.name} ${p.sku} ${p.category || ''}`.toLowerCase().includes(query.toLowerCase()))
-  const lowStockCount = variants.filter(v => v.quantity <= v.reorder_level).length
+  const todayKey = new Date().toLocaleDateString('en-CA')
+  const monthKey = todayKey.slice(0,7)
+  const dateInRange = (value: string, start: string, end: string) => {
+    const key = String(value || '').slice(0,10)
+    return key >= start && key <= end
+  }
+  const todaySales = sales.filter(s => String(s.created_at).slice(0,10) === todayKey)
+  const monthSales = sales.filter(s => String(s.created_at).slice(0,7) === monthKey)
+  const todayRevenue = todaySales.reduce((sum,s)=>sum+Number(s.total),0)
+  const monthRevenue = monthSales.reduce((sum,s)=>sum+Number(s.total),0)
+  const monthReturns = returns.filter(r=>String(r.created_at).slice(0,7)===monthKey)
+  const monthRefunds = monthReturns.reduce((sum,r)=>sum+Number(r.refund_total),0)
+  const monthCOGS = monthSales.reduce((sum,s)=>sum+(s.sale_items||[]).reduce((n:number,line:any)=>n+Number(line.unit_cost||0)*Number(line.quantity||0),0),0)
+    - monthReturns.filter(r=>r.restock_items).reduce((sum,r)=>sum+(r.sales_return_items||[]).reduce((n:number,line:any)=>{const sold=monthSales.flatMap(s=>s.sale_items||[]).find((x:any)=>x.id===line.sale_item_id);return n+Number(sold?.unit_cost||0)*Number(line.quantity||0)},0),0),0)
+  const monthOperatingExpenses = expenses.filter(e=>String(e.expense_date).slice(0,7)===monthKey && e.category!=='Supplier Payment').reduce((sum,e)=>sum+Number(e.amount),0)
+  const monthGrossProfit = monthRevenue-monthRefunds-monthCOGS
+  const monthEstimatedProfit = monthGrossProfit-monthOperatingExpenses
+  const reportSales = sales.filter(s=>dateInRange(s.created_at,reportStart,reportEnd))
+  const reportReturns = returns.filter(r=>dateInRange(r.created_at,reportStart,reportEnd))
+  const reportExpenses = expenses.filter(e=>dateInRange(e.expense_date,reportStart,reportEnd))
+  const reportRevenue = reportSales.reduce((sum,s)=>sum+Number(s.total),0)
+  const reportRefunds = reportReturns.reduce((sum,r)=>sum+Number(r.refund_total),0)
+  const reportCOGS = reportSales.reduce((sum,s)=>sum+(s.sale_items||[]).reduce((n:number,line:any)=>n+Number(line.unit_cost||0)*Number(line.quantity||0),0),0)
+    - reportReturns.filter(r=>r.restock_items).reduce((sum,r)=>sum+(r.sales_return_items||[]).reduce((n:number,line:any)=>{const sold=reportSales.flatMap(s=>s.sale_items||[]).find((x:any)=>x.id===line.sale_item_id);return n+Number(sold?.unit_cost||0)*Number(line.quantity||0)},0),0),0)
+  const reportOperatingExpenses = reportExpenses.filter(e=>e.category!=='Supplier Payment').reduce((sum,e)=>sum+Number(e.amount),0)
+  const reportGrossProfit = reportRevenue-reportRefunds-reportCOGS
+  const reportNetProfit = reportGrossProfit-reportOperatingExpenses
+  const paymentBreakdown = ['Cash','Card','Bank Transfer'].map(method=>({method,count:reportSales.filter(s=>s.payment_method===method).length,total:reportSales.filter(s=>s.payment_method===method).reduce((sum,s)=>sum+Number(s.total),0)}))
+  const topProducts = Object.values(reportSales.flatMap(s=>s.sale_items||[]).reduce((acc:any,line:any)=>{const key=line.product_no||line.product_name;acc[key]??={name:line.product_name,productNo:line.product_no,quantity:0,revenue:0};acc[key].quantity+=Number(line.quantity);acc[key].revenue+=Number(line.line_total);return acc},{})).sort((x:any,y:any)=>y.quantity-x.quantity).slice(0,8)
+  const expenseBreakdown = Object.values(reportExpenses.reduce((acc:any,e:any)=>{acc[e.category]??={category:e.category,total:0,count:0};acc[e.category].total+=Number(e.amount);acc[e.category].count++;return acc},{})).sort((x:any,y:any)=>y.total-x.total)
+  const lowStockItems = posVariants.filter(v=>v.quantity<=v.reorder_level).sort((x,y)=>x.quantity-y.quantity).slice(0,8)
+  const lowStockCount = posVariants.filter(v => v.quantity <= v.reorder_level).length
 
   if (!authReady) return <div className="auth-screen"><article><h2>Clothing ERP</h2><p>Checking your secure session…</p></article></div>
   if (supabaseConfigured && !session) return <div className="auth-screen"><form className="login-card" onSubmit={signIn}>
@@ -477,6 +510,46 @@ export default function App() {
           <p className="eyebrow">SHOP OVERVIEW</p><h1>Good morning 👋</h1><p>Here’s what’s happening with your shop.</p>
           <div className="stats">{[[ 'Today’s Sales', 'Rs. 48,650' ], [ 'Gross Profit', 'Rs. 16,420' ], [ 'Products', String(products.length) ], [ 'Low Stock Variants', String(lowStockCount) ]].map(([label, value]) => <article key={label}><small>{label}</small><h2>{value}</h2></article>)}</div>
           <article><h3>Quick actions</h3><button onClick={() => setPage('Products & Stock')}>Manage products & stock</button><button onClick={() => setPage('Point of Sale')}>Open POS</button><p className="muted">Sales and profit are sample figures until POS is implemented.</p></article>
+                {page === 'Overview' ? <>
+          <div className="heading"><div><p className="eyebrow">LIVE SHOP OVERVIEW</p><h1>Good morning 👋</h1><p>Business performance based on the latest loaded transactions.</p></div><button onClick={()=>{void loadSales();void loadExpenses();void loadReturns();void loadPOSVariants();void loadProducts()}}>Refresh data</button></div>
+          <div className="stats">
+            {[[ 'Today’s Sales', money(todayRevenue) ],[ 'Monthly Sales', money(monthRevenue) ],[ 'Estimated Monthly Profit', money(monthEstimatedProfit) ],[ 'Low Stock Variants', String(lowStockCount) ]].map(([label,value])=><article key={label}><small>{label}</small><h2>{value}</h2></article>)}
+          </div>
+          <div className="dashboard-grid">
+            <article><div className="toolbar"><h3>Monthly performance</h3><span className="muted">{monthKey}</span></div>
+              <div className="performance-list"><div><span>Gross sales</span><b>{money(monthRevenue)}</b></div><div><span>Refunds</span><b>{money(monthRefunds)}</b></div><div><span>Cost of goods sold</span><b>{money(monthCOGS)}</b></div><div><span>Gross profit</span><b>{money(monthGrossProfit)}</b></div><div><span>Operating expenses</span><b>{money(monthOperatingExpenses)}</b></div><div className="performance-total"><span>Estimated net profit</span><b>{money(monthEstimatedProfit)}</b></div></div>
+            </article>
+            <article><div className="toolbar"><h3>Low stock alerts</h3><button className="small-action" onClick={()=>setPage('Products & Stock')}>View inventory</button></div>
+              <div className="tablewrap"><table><thead><tr><th>PRODUCT</th><th>SIZE / COLOUR</th><th>STOCK</th><th>REORDER</th></tr></thead><tbody>
+                {lowStockItems.map(v=><tr key={v.id}><td>{v.product_name}<small>{v.product_no}</small></td><td>{v.size} / {v.colour}</td><td><b>{v.quantity}</b></td><td>{v.reorder_level}</td></tr>)}
+                {lowStockItems.length===0&&<tr><td colSpan={4}>No low-stock variants. Great work!</td></tr>}
+              </tbody></table></div>
+            </article>
+          </div>
+          <article><div className="toolbar"><h3>Recent sales</h3><button className="small-action" onClick={()=>setPage('Sales History')}>View all sales</button></div>
+            <div className="tablewrap"><table><thead><tr><th>DATE</th><th>INVOICE</th><th>PAYMENT</th><th>ITEMS</th><th>TOTAL</th></tr></thead><tbody>
+              {sales.slice(0,6).map(s=><tr key={s.id}><td>{new Date(s.created_at).toLocaleString()}</td><td><b>{s.invoice_no}</b></td><td>{s.payment_method}</td><td>{(s.sale_items||[]).reduce((n:number,i:any)=>n+Number(i.quantity),0)}</td><td>{money(Number(s.total))}</td></tr>)}
+              {sales.length===0&&<tr><td colSpan={5}>No sales recorded yet.</td></tr>}
+            </tbody></table></div>
+          </article>
+          <p className="muted">Figures use the latest 500 sales, 500 returns and 1,000 expenses loaded by this app. Estimated profit excludes supplier-payment entries to avoid treating inventory settlement as an operating expense. Confirm accounting treatment with your accountant.</p>
+        </> : page === 'Reports' ? <>
+          <div className="heading"><div><p className="eyebrow">BUSINESS INTELLIGENCE</p><h1>Reports & Analytics</h1><p>Review sales, refunds, estimated profit, payment methods and product performance.</p></div><button onClick={()=>{void loadSales();void loadExpenses();void loadReturns();void loadPOSVariants()}}>Refresh reports</button></div>
+          <article className="report-filter"><label>From<input type="date" value={reportStart} max={reportEnd} onChange={e=>setReportStart(e.target.value)}/></label><label>To<input type="date" value={reportEnd} min={reportStart} onChange={e=>setReportEnd(e.target.value)}/></label><button onClick={()=>{const d=new Date();setReportEnd(d.toISOString().slice(0,10));setReportStart(new Date(d.getFullYear(),d.getMonth(),1).toISOString().slice(0,10))}}>This month</button><button onClick={()=>{const d=new Date();setReportEnd(d.toISOString().slice(0,10));setReportStart(new Date(d.getFullYear(),0,1).toISOString().slice(0,10))}}>This year</button></article>
+          <div className="stats report-stats">{[[ 'Gross Sales',money(reportRevenue) ],[ 'Refunds',money(reportRefunds) ],[ 'Net Sales',money(reportRevenue-reportRefunds) ],[ 'Gross Profit (Est.)',money(reportGrossProfit) ],[ 'Operating Expenses',money(reportOperatingExpenses) ],[ 'Net Profit (Est.)',money(reportNetProfit) ]].map(([label,value])=><article key={label}><small>{label}</small><h2>{value}</h2></article>)}</div>
+          <div className="dashboard-grid">
+            <article><h3>Sales by payment method</h3><div className="report-list">{paymentBreakdown.map(x=><div key={x.method}><span>{x.method}<small>{x.count} transactions</small></span><b>{money(x.total)}</b></div>)}</div></article>
+            <article><h3>Expenses by category</h3><div className="report-list">{expenseBreakdown.map((x:any)=><div key={x.category}><span>{x.category}<small>{x.count} entries</small></span><b>{money(x.total)}</b></div>)}{expenseBreakdown.length===0&&<p className="muted">No expenses for this period.</p>}</div></article>
+          </div>
+          <article><h3>Top-selling products</h3><div className="tablewrap"><table><thead><tr><th>PRODUCT</th><th>PRODUCT NO.</th><th>UNITS SOLD</th><th>SALES VALUE</th></tr></thead><tbody>
+            {topProducts.map((x:any)=><tr key={x.productNo||x.name}><td>{x.name}</td><td>{x.productNo||'—'}</td><td>{x.quantity}</td><td>{money(x.revenue)}</td></tr>)}
+            {topProducts.length===0&&<tr><td colSpan={4}>No product sales in this period.</td></tr>}
+          </tbody></table></div></article>
+          <article><h3>Recent transactions in selected period</h3><div className="tablewrap"><table><thead><tr><th>DATE</th><th>INVOICE</th><th>ITEMS</th><th>PAYMENT</th><th>AMOUNT</th></tr></thead><tbody>
+            {reportSales.slice(0,12).map(s=><tr key={s.id}><td>{new Date(s.created_at).toLocaleDateString()}</td><td>{s.invoice_no}</td><td>{(s.sale_items||[]).reduce((n:number,i:any)=>n+Number(i.quantity),0)}</td><td>{s.payment_method}</td><td>{money(Number(s.total))}</td></tr>)}
+            {reportSales.length===0&&<tr><td colSpan={5}>No sales in this period.</td></tr>}
+          </tbody></table></div></article>
+          <p className="muted">Reports use the latest 500 sales, 500 returns and 1,000 expenses loaded by this app. Profit is estimated from recorded sale-item unit costs and restocked returns; supplier-payment expenses are excluded from operating expenses. Export and full accounting reconciliation are not included in this release.</p>
         </> : page === 'Sales History' ? <>
           <div className="heading"><div><p className="eyebrow">TRANSACTIONS</p><h1>Sales History</h1><p>Search invoices and review completed sales.</p></div><button onClick={() => void loadSales()}>Refresh</button></div>
           <article>
