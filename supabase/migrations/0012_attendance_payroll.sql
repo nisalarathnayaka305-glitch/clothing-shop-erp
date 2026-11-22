@@ -116,7 +116,7 @@ create or replace function public.manager_check_in(p_employee_id uuid,p_work_dat
 returns uuid language plpgsql security definer set search_path = public as $$
 declare v_attendance_id uuid;
 begin
-  if public.current_employee_role() not in ('Admin','Manager') then raise exception 'Only Admin or Manager can record attendance for another employee'; end if;
+  if coalesce(public.current_employee_role() not in ('Admin','Manager'), true) then raise exception 'Only Admin or Manager can record attendance for another employee'; end if;
   if p_work_date <> (now() at time zone 'Asia/Colombo')::date then raise exception 'Attendance punches are only allowed for the current Sri Lankan date'; end if;
   if not exists(select 1 from public.employees where id=p_employee_id and status='Active') then raise exception 'Active employee not found'; end if;
   insert into public.employee_attendance(employee_id,work_date,check_in,status,created_by)
@@ -131,7 +131,7 @@ create or replace function public.manager_check_out(p_attendance_id uuid)
 returns uuid language plpgsql security definer set search_path = public as $$
 declare v_attendance_id uuid;
 begin
-  if public.current_employee_role() not in ('Admin','Manager') then raise exception 'Only Admin or Manager can record attendance for another employee'; end if;
+  if coalesce(public.current_employee_role() not in ('Admin','Manager'), true) then raise exception 'Only Admin or Manager can record attendance for another employee'; end if;
   update public.employee_attendance set check_out=now()
    where id=p_attendance_id and work_date=(now() at time zone 'Asia/Colombo')::date and check_in is not null and check_out is null
    returning id into v_attendance_id;
