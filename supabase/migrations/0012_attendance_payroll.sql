@@ -44,33 +44,17 @@ using (
 );
 
 drop policy if exists "Employees can insert own attendance" on public.employee_attendance;
-create policy "Employees can insert own attendance"
-on public.employee_attendance for insert to authenticated
-with check (
-  public.current_employee_role() in ('Admin','Manager')
-  or exists (
-    select 1 from public.employees e
-    where e.id = employee_id and e.auth_user_id = auth.uid() and e.status = 'Active'
-  )
-);
-
 drop policy if exists "Employees can update own attendance" on public.employee_attendance;
-create policy "Employees can update own attendance"
+drop policy if exists "Managers can insert attendance" on public.employee_attendance;
+create policy "Managers can insert attendance"
+on public.employee_attendance for insert to authenticated
+with check (public.current_employee_role() in ('Admin','Manager'));
+
+drop policy if exists "Managers can update attendance" on public.employee_attendance;
+create policy "Managers can update attendance"
 on public.employee_attendance for update to authenticated
-using (
-  public.current_employee_role() in ('Admin','Manager')
-  or exists (
-    select 1 from public.employees e
-    where e.id = employee_id and e.auth_user_id = auth.uid() and e.status = 'Active'
-  )
-)
-with check (
-  public.current_employee_role() in ('Admin','Manager')
-  or exists (
-    select 1 from public.employees e
-    where e.id = employee_id and e.auth_user_id = auth.uid() and e.status = 'Active'
-  )
-);
+using (public.current_employee_role() in ('Admin','Manager'))
+with check (public.current_employee_role() in ('Admin','Manager'));
 
 drop policy if exists "Managers can delete attendance" on public.employee_attendance;
 create policy "Managers can delete attendance"
@@ -91,6 +75,75 @@ drop trigger if exists employee_attendance_updated_at on public.employee_attenda
 create trigger employee_attendance_updated_at
 before update on public.employee_attendance
 for each row execute function public.set_attendance_updated_at();
+
+-- Employees can only punch their own attendance through server-timestamped RPCs.
+create or replace function public.employee_check_in(p_work_date date)
+returns uuid language plpgsql security definer set search_path = public as $
+declare v_employee_id uuid; v_attendance_id uuid;
+begin
+  if auth.uid() is null then raise exception 'Authentication required'; end if;
+  select id into v_employee_id from public.employees
+   where auth_user_id=auth.uid() and status='Active' limit 1;
+  if v_employee_id is null then raise exception 'No active employee profile is linked to this login'; end if;
+  insert into public.employee_attendance(employee_id,work_date,check_in,status,created_by)
+  values(v_employee_id,p_work_date,now(),'Present',auth.uid())
+  on conflict(employee_id,work_date) do update
+    set check_in=coalesce(public.employee_attendance.check_in,excluded.check_in),
+        status=case when public.employee_attendance.status in ('Leave','Absent') then public.employee_attendance.status else 'Present' end
+  returning id into v_attendance_id;
+  return v_attendance_id;
+end; $;
+
+create or replace function public.employee_check_out(p_work_date date)
+returns uuid language plpgsql security definer set search_path = public as $
+declare v_employee_id uuid; v_attendance_id uuid;
+begin
+  if auth.uid() is null then raise exception 'Authentication required'; end if;
+  select id into v_employee_id from public.employees
+   where auth_user_id=auth.uid() and status='Active' limit 1;
+  if v_employee_id is null then raise exception 'No active employee profile is linked to this login'; end if;
+  update public.employee_attendance set check_out=now()
+   where employee_id=v_employee_id and work_date=p_work_date
+     and check_in is not null and check_out is null
+   returning id into v_attendance_id;
+  if v_attendance_id is null then raise exception 'No open check-in was found for this date'; end if;
+  return v_attendance_id;
+end; $;
+
+create or replace function public.manager_check_in(p_employee_id uuid,p_work_date date)
+returns uuid language plpgsql security definer set search_path = public as $
+declare v_attendance_id uuid;
+begin
+  if public.current_employee_role() not in ('Admin','Manager') then raise exception 'Only Admin or Manager can record attendance for another employee'; end if;
+  if not exists(select 1 from public.employees where id=p_employee_id and status='Active') then raise exception 'Active employee not found'; end if;
+  insert into public.employee_attendance(employee_id,work_date,check_in,status,created_by)
+  values(p_employee_id,p_work_date,now(),'Present',auth.uid())
+  on conflict(employee_id,work_date) do update
+    set check_in=coalesce(public.employee_attendance.check_in,excluded.check_in)
+  returning id into v_attendance_id;
+  return v_attendance_id;
+end; $;
+
+create or replace function public.manager_check_out(p_attendance_id uuid)
+returns uuid language plpgsql security definer set search_path = public as $
+declare v_attendance_id uuid;
+begin
+  if public.current_employee_role() not in ('Admin','Manager') then raise exception 'Only Admin or Manager can record attendance for another employee'; end if;
+  update public.employee_attendance set check_out=now()
+   where id=p_attendance_id and check_in is not null and check_out is null
+   returning id into v_attendance_id;
+  if v_attendance_id is null then raise exception 'No open check-in was found'; end if;
+  return v_attendance_id;
+end; $;
+
+revoke all on function public.employee_check_in(date) from public;
+revoke all on function public.employee_check_out(date) from public;
+revoke all on function public.manager_check_in(uuid,date) from public;
+revoke all on function public.manager_check_out(uuid) from public;
+grant execute on function public.employee_check_in(date) to authenticated;
+grant execute on function public.employee_check_out(date) to authenticated;
+grant execute on function public.manager_check_in(uuid,date) to authenticated;
+grant execute on function public.manager_check_out(uuid) to authenticated;
 
 create table if not exists public.payroll_runs (
   id uuid primary key default gen_random_uuid(),
