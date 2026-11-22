@@ -203,3 +203,24 @@ grant select, insert, update, delete on public.payroll_items to authenticated;
 -- Payroll is a basic gross-pay register only. Statutory EPF/ETF, PAYE,
 -- overtime rules, leave encashment and payslip delivery require separate
 -- configuration and should be reviewed for current Sri Lankan requirements.
+
+-- Prevent overlapping payroll periods so the same date range cannot be paid twice.
+create or replace function public.prevent_overlapping_payroll_runs()
+returns trigger language plpgsql set search_path = public as $$
+begin
+  if exists (
+    select 1 from public.payroll_runs r
+    where r.id is distinct from new.id
+      and new.period_start <= r.period_end
+      and new.period_end >= r.period_start
+  ) then
+    raise exception 'This payroll period overlaps an existing payroll run';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists payroll_runs_no_overlap on public.payroll_runs;
+create trigger payroll_runs_no_overlap
+before insert or update of period_start, period_end on public.payroll_runs
+for each row execute function public.prevent_overlapping_payroll_runs();
