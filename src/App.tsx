@@ -103,13 +103,13 @@ export default function App() {
   async function loadEmployees() {
     if (!supabase || !session) return
     const { data: ownProfile, error: ownError } = await supabase.from('employees')
-      .select('id,role,status,full_name').eq('auth_user_id', session.user.id).maybeSingle()
+      .select('id,employee_no,role,status,full_name,auth_user_id,salary_basis,base_salary').eq('auth_user_id', session.user.id).maybeSingle()
     if (ownError) { setNotice(ownError.message); return }
     const role = ownProfile?.status === 'Active' ? ownProfile.role : null
     setCurrentEmployeeRole(role)
     if (role === 'Admin' || role === 'Manager') {
       const { data, error } = await supabase.from('employees')
-        .select('id,employee_no,full_name,email,phone,job_title,department,employment_type,hire_date,auth_user_id,role,status,notes,created_at')
+        .select('id,employee_no,full_name,email,phone,job_title,department,employment_type,hire_date,auth_user_id,role,status,salary_basis,base_salary,notes,created_at')
         .order('created_at', { ascending: false })
       if (error) setNotice(error.message)
       else if (data) setEmployees(data)
@@ -520,6 +520,8 @@ export default function App() {
       auth_user_id: employeeForm.auth_user_id.trim() || null,
       role: employeeForm.role,
       status: employeeForm.status,
+      salary_basis: employeeForm.salary_basis,
+      base_salary: Number(employeeForm.base_salary || 0),
       notes: employeeForm.notes.trim() || null,
     }
     setBusy(true)
@@ -532,7 +534,7 @@ export default function App() {
       else {
         setNotice(employeeEditingId ? 'Employee updated successfully.' : 'Employee added successfully.')
         setEmployeeEditingId(null)
-        setEmployeeForm({ full_name: '', email: '', phone: '', job_title: '', department: '', employment_type: 'Full-time', hire_date: new Date().toISOString().slice(0,10), auth_user_id: '', role: 'Staff', status: 'Active', notes: '' })
+        setEmployeeForm({ full_name: '', email: '', phone: '', job_title: '', department: '', employment_type: 'Full-time', hire_date: new Date().toISOString().slice(0,10), auth_user_id: '', role: 'Staff', status: 'Active', salary_basis: 'Monthly', base_salary: '0', notes: '' })
         await loadEmployees()
       }
     } else {
@@ -547,7 +549,7 @@ export default function App() {
 
   function editEmployee(employee: any) {
     setEmployeeEditingId(employee.id)
-    setEmployeeForm({ full_name: employee.full_name || '', email: employee.email || '', phone: employee.phone || '', job_title: employee.job_title || '', department: employee.department || '', employment_type: employee.employment_type || 'Full-time', hire_date: employee.hire_date || '', auth_user_id: employee.auth_user_id || '', role: employee.role || 'Staff', status: employee.status || 'Active', notes: employee.notes || '' })
+    setEmployeeForm({ full_name: employee.full_name || '', email: employee.email || '', phone: employee.phone || '', job_title: employee.job_title || '', department: employee.department || '', employment_type: employee.employment_type || 'Full-time', hire_date: employee.hire_date || '', auth_user_id: employee.auth_user_id || '', role: employee.role || 'Staff', status: employee.status || 'Active', salary_basis: employee.salary_basis || 'Monthly', base_salary: String(employee.base_salary || 0), notes: employee.notes || '' })
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
@@ -680,7 +682,7 @@ export default function App() {
   </form></div>
 
   return <div className="shell">
-    <aside><h2>◈ Clothing ERP</h2><small>RETAIL MANAGEMENT</small>{(supabaseConfigured && session ? (currentEmployeeRole === 'Admin' ? navigation : currentEmployeeRole === 'Manager' ? navigation.filter(item=>item!=='Settings') : currentEmployeeRole === 'Cashier' ? ['Overview','Point of Sale','Sales History','Customers'] : currentEmployeeRole === 'Staff' ? ['Overview','Products & Stock'] : ['Overview','Employees']) : navigation).map(item => <button key={item} className={page === item ? 'active' : ''} onClick={() => setPage(item)}>{item}</button>)}</aside>
+    <aside><h2>◈ Clothing ERP</h2><small>RETAIL MANAGEMENT</small>{(supabaseConfigured && session ? (currentEmployeeRole === 'Admin' ? navigation : currentEmployeeRole === 'Manager' ? navigation.filter(item=>item!=='Settings') : currentEmployeeRole === 'Cashier' ? ['Overview','Point of Sale','Sales History','Customers','Attendance'] : currentEmployeeRole === 'Staff' ? ['Overview','Products & Stock','Attendance'] : ['Overview','Employees']) : navigation).map(item => <button key={item} className={page === item ? 'active' : ''} onClick={() => setPage(item)}>{item}</button>)}</aside>
     <main><header><b>Workspace / {page}</b><div className="header-actions"><span className={supabaseConfigured ? 'ok' : 'demo'}>{supabaseConfigured ? 'Supabase connected' : 'Demo mode'}</span>{session && <button className="text-button" onClick={() => void signOut()}>Sign out</button>}</div></header>
       <section>
         {notice && <p className="notice">{notice}<button className="dismiss" onClick={() => setNotice('')}>×</button></p>}
@@ -742,6 +744,8 @@ export default function App() {
                 <label>Hire date<input type="date" value={employeeForm.hire_date} onChange={e=>setEmployeeForm({...employeeForm,hire_date:e.target.value})}/></label>
                 <label>System role<select value={employeeForm.role} onChange={e=>setEmployeeForm({...employeeForm,role:e.target.value})}>{['Admin','Manager','Cashier','Staff'].map(x=><option key={x}>{x}</option>)}</select></label>
                 <label>Status<select value={employeeForm.status} onChange={e=>setEmployeeForm({...employeeForm,status:e.target.value})}><option>Active</option><option>Inactive</option></select></label>
+                <label>Pay basis<select value={employeeForm.salary_basis} onChange={e=>setEmployeeForm({...employeeForm,salary_basis:e.target.value})}><option>Monthly</option><option>Hourly</option></select></label>
+                <label>{employeeForm.salary_basis==='Hourly'?'Hourly rate (LKR)':'Monthly salary (LKR)'}<input type="number" min="0" step="0.01" value={employeeForm.base_salary} onChange={e=>setEmployeeForm({...employeeForm,base_salary:e.target.value})}/></label>
                 <label className="employee-wide">Supabase Auth User ID<input value={employeeForm.auth_user_id} onChange={e=>setEmployeeForm({...employeeForm,auth_user_id:e.target.value})} placeholder="Paste the Auth user UUID after creating their login"/></label>
                 <label className="employee-wide">Notes<textarea rows={2} value={employeeForm.notes} onChange={e=>setEmployeeForm({...employeeForm,notes:e.target.value})}/></label>
                 <div className="employee-wide"><button className="primary" disabled={busy}>{busy?'Saving…':employeeEditingId?'Update employee':'Save employee'}</button></div>
@@ -755,6 +759,37 @@ export default function App() {
               </tbody></table></div>
             </article>
           </>}
+        </> : page === 'Attendance' ? <>
+          <div className="heading"><div><p className="eyebrow">TIME & ATTENDANCE</p><h1>Attendance</h1><p>Record daily check-in and check-out times and review worked hours.</p></div><button onClick={()=>{void loadEmployees();void loadAttendance()}}>Refresh</button></div>
+          <article className="attendance-punch">
+            <div><small>ATTENDANCE DATE</small><input type="date" value={attendanceDate} onChange={e=>setAttendanceDate(e.target.value)}/></div>
+            {['Admin','Manager'].includes(currentEmployeeRole||'') && <div><small>EMPLOYEE</small><select value={attendanceEmployeeId || (employees.find(e=>e.auth_user_id===session?.user.id)?.id || '')} onChange={e=>setAttendanceEmployeeId(e.target.value)}><option value="">Select employee</option>{employees.filter(e=>e.status==='Active').map(e=><option key={e.id} value={e.id}>{e.employee_no} – {e.full_name}</option>)}</select></div>}
+            <div className="punch-actions">
+              {(() => { const own=employees.find(e=>e.auth_user_id===session?.user.id); const targetId=['Admin','Manager'].includes(currentEmployeeRole||'')?(attendanceEmployeeId||own?.id||''):(own?.id||''); const todayRecord=attendanceRecords.find(r=>r.employee_id===targetId&&r.work_date===attendanceDate); return <><button className="primary" disabled={busy||!targetId||!!todayRecord?.check_in} onClick={()=>void punchIn(targetId)}>Check in</button><button disabled={busy||!todayRecord?.check_in||!!todayRecord?.check_out} onClick={()=>void punchOut(todayRecord)}>Check out</button><span className="muted">{todayRecord?.check_in?todayRecord.check_out?'Shift completed': 'Checked in at '+new Date(todayRecord.check_in).toLocaleTimeString(): 'No check-in recorded for this date.'}</span></> })()}
+            </div>
+          </article>
+          {!session && supabaseConfigured && <article><p>Please sign in to record attendance.</p></article>}
+          {session && !employees.some(e=>e.auth_user_id===session.user.id) && !['Admin','Manager'].includes(currentEmployeeRole||'') && <article><p>Your login is not linked to an active employee record. Ask an administrator to link your Supabase Auth User ID in Employee Management.</p></article>}
+          <article><div className="toolbar"><div><h3>Daily attendance</h3><p className="muted">{attendanceRecords.filter(r=>r.work_date===attendanceDate).length} records for {attendanceDate}</p></div><button onClick={()=>void loadAttendance()}>Refresh records</button></div>
+            <div className="tablewrap"><table><thead><tr><th>EMPLOYEE</th><th>CHECK IN</th><th>CHECK OUT</th><th>HOURS</th><th>STATUS</th></tr></thead><tbody>
+              {attendanceRecords.filter(r=>r.work_date===attendanceDate).map(r=>{const p=Array.isArray(r.employees)?r.employees[0]:r.employees;return <tr key={r.id}><td><b>{p?.employee_no||'—'} {p?.full_name||'Employee'}</b><small>{p?.job_title||''}</small></td><td>{r.check_in?new Date(r.check_in).toLocaleTimeString():'—'}</td><td>{r.check_out?new Date(r.check_out).toLocaleTimeString():'—'}</td><td>{r.check_out?attendanceHours(r).toFixed(2)+' h':'In progress'}</td><td>{['Admin','Manager'].includes(currentEmployeeRole||'')?<select value={r.status} onChange={e=>void updateAttendanceStatus(r,e.target.value)}>{['Present','Late','Half-day','Leave','Absent'].map(x=><option key={x}>{x}</option>)}</select>:r.status}</td></tr>})}
+              {attendanceRecords.filter(r=>r.work_date===attendanceDate).length===0&&<tr><td colSpan={5}>No attendance records for this date.</td></tr>}
+            </tbody></table></div>
+          </article>
+          <article><h3>Attendance history</h3><div className="tablewrap"><table><thead><tr><th>DATE</th><th>EMPLOYEE</th><th>HOURS</th><th>STATUS</th></tr></thead><tbody>{attendanceRecords.slice(0,30).map(r=>{const p=Array.isArray(r.employees)?r.employees[0]:r.employees;return <tr key={r.id}><td>{r.work_date}</td><td>{p?.full_name||'Employee'}</td><td>{r.check_out?attendanceHours(r).toFixed(2)+' h':'—'}</td><td>{r.status}</td></tr>})}{attendanceRecords.length===0&&<tr><td colSpan={4}>No attendance history yet.</td></tr>}</tbody></table></div></article>
+        </> : page === 'Payroll' ? <>
+          <div className="heading"><div><p className="eyebrow">PAYROLL REGISTER</p><h1>Payroll</h1><p>Prepare a draft gross-pay register from employee pay rates and recorded attendance.</p></div><button onClick={()=>{void loadEmployees();void loadAttendance();void loadPayrollRuns()}}>Refresh</button></div>
+          {['Admin','Manager'].includes(currentEmployeeRole||'') ? <>
+            <article className="payroll-builder"><h3>Create payroll run</h3><div className="payroll-filters"><label>Period start<input type="date" value={payrollStart} onChange={e=>setPayrollStart(e.target.value)}/></label><label>Period end<input type="date" value={payrollEnd} min={payrollStart} onChange={e=>setPayrollEnd(e.target.value)}/></label><button className="primary" disabled={busy} onClick={()=>void createPayrollRun()}>{busy?'Preparing…':'Generate draft payroll'}</button></div>
+              <p className="muted">Monthly employees receive the configured monthly base salary for this run. Hourly employees are calculated from completed attendance hours. Enter any manual deductions below before generating the draft.</p>
+              <div className="tablewrap"><table><thead><tr><th>EMPLOYEE</th><th>PAY BASIS</th><th>RATE</th><th>HOURS</th><th>DAYS</th><th>DEDUCTION (LKR)</th><th>EST. GROSS</th></tr></thead><tbody>
+                {employees.filter(e=>e.status==='Active').map(e=>{const rows=attendanceRecords.filter(r=>r.employee_id===e.id&&r.work_date>=payrollStart&&r.work_date<=payrollEnd);const hours=rows.reduce((n,r)=>n+attendanceHours(r),0);const days=rows.reduce((n,r)=>n+(r.status==='Half-day'?.5:['Present','Late'].includes(r.status)?1:0),0);const gross=(e.salary_basis||'Monthly')==='Hourly'?hours*Number(e.base_salary||0):Number(e.base_salary||0);return <tr key={e.id}><td><b>{e.employee_no} – {e.full_name}</b></td><td>{e.salary_basis||'Monthly'}</td><td>{money(Number(e.base_salary||0))}</td><td>{hours.toFixed(2)}</td><td>{days.toFixed(1)}</td><td><input className="deduction-input" type="number" min="0" max={gross} step="0.01" value={payrollDeductions[e.id]||'0'} onChange={ev=>setPayrollDeductions(cur=>({...cur,[e.id]:ev.target.value}))}/></td><td>{money(gross)}</td></tr>})}
+                {employees.filter(e=>e.status==='Active').length===0&&<tr><td colSpan={7}>No active employees.</td></tr>}
+              </tbody></table></div>
+            </article>
+            <div className="payroll-runs"><h3>Payroll history</h3>{payrollRuns.map(run=><article key={run.id}><div className="toolbar"><div><h3>{run.period_start} – {run.period_end}</h3><span className={run.status==='Paid'?'stock-ok':'stock-low'}>{run.status}</span></div><div><b>Net: {money(Number(run.total_net))}</b>{run.status==='Draft'&&<button className="primary" onClick={()=>void markPayrollPaid(run)}>Mark as paid</button>}</div></div><p className="muted">Gross {money(Number(run.total_gross))} · Deductions {money(Number(run.total_deductions))} · Net {money(Number(run.total_net))}</p><div className="tablewrap"><table><thead><tr><th>EMPLOYEE</th><th>BASIS</th><th>HOURS</th><th>GROSS</th><th>DEDUCTIONS</th><th>NET PAY</th></tr></thead><tbody>{(run.payroll_items||[]).map((item:any)=>{const p=Array.isArray(item.employees)?item.employees[0]:item.employees;return <tr key={item.id}><td>{p?.employee_no||''} {p?.full_name||'Employee'}</td><td>{item.salary_basis}</td><td>{Number(item.hours_worked).toFixed(2)}</td><td>{money(Number(item.gross_pay))}</td><td>{money(Number(item.deductions))}</td><td><b>{money(Number(item.net_pay))}</b></td></tr>})}</tbody></table></div></article>)}{payrollRuns.length===0&&<article>No payroll runs have been created yet.</article>}</div>
+          </> : <article><p>Payroll access is restricted to Admin and Manager roles.</p></article>}
+          <article className="payroll-note"><b>Payroll scope:</b> This is a basic payroll register, not a statutory payroll calculator. EPF/ETF, PAYE, overtime, leave encashment, payslip generation and legal compliance calculations are not included. Verify applicable Sri Lankan requirements before making payments.</article>
         </> : page === 'Sales History' ? <>
           <div className="heading"><div><p className="eyebrow">TRANSACTIONS</p><h1>Sales History</h1><p>Search invoices and review completed sales.</p></div><button onClick={() => void loadSales()}>Refresh</button></div>
           <article>
