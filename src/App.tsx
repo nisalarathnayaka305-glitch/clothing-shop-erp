@@ -16,7 +16,7 @@ type CartLine = { variant_id: string; product_no: string; name: string; sku: str
 type Invoice = { invoice_no: string; subtotal: number; discount: number; total: number; amount_received: number; change_amount: number; payment_method: string; created_at: string; items: CartLine[] }
 
 const navigation = ['Overview', 'Point of Sale', 'Sales History', 'Returns & Exchanges', 'Products & Stock', 'Purchases', 'Customers', 'Suppliers', 'Expenses', 'Reports', 'Employees', 'Attendance', 'Payroll', 'Settings']
-const localBusinessDate = () => { const now = new Date(); return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0,10) }
+const localBusinessDate = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Colombo' }).format(new Date())
 
 export default function App() {
   const [products, setProducts] = useState<Product[]>(demo)
@@ -192,10 +192,6 @@ export default function App() {
     return Math.max(0,(new Date(record.check_out).getTime()-new Date(record.check_in).getTime())/3600000-Number(record.break_minutes||0)/60)
   }
 
-  function activePeriodHasPaidRun(runs: any[], start: string, end: string) {
-    return runs.some(run=>run.period_start===start && run.period_end===end && run.status==='Paid')
-  }
-
   function monthlyPayForPeriod(amount: number, start: string, end: string) {
     let cursor = new Date(start + 'T00:00:00Z')
     const last = new Date(end + 'T00:00:00Z')
@@ -217,10 +213,10 @@ export default function App() {
     if (!payrollStart || !payrollEnd || payrollEnd < payrollStart) { setNotice('Enter a valid payroll date range.'); return }
     if (employees.filter(e=>e.status==='Active').length===0) { setNotice('No active employees are available for payroll.'); return }
     const duplicate=payrollRuns.find(r=>r.period_start===payrollStart && r.period_end===payrollEnd)
-    if (duplicate) { setNotice('A payroll run already exists for this period.'); return }
-    if (activePeriodHasPaidRun(payrollRuns,payrollStart,payrollEnd)) { setNotice('This payroll period has already been paid.'); return }
+    if (duplicate) { setNotice(duplicate.status==='Paid'?'This payroll period has already been paid.':'A draft payroll already exists for this period.'); return }
     setBusy(true)
     const active=employees.filter(e=>e.status==='Active' && (!e.hire_date || e.hire_date<=payrollEnd))
+    if (active.length===0) { setNotice('No active employees were employed during this payroll period.'); setBusy(false); return }
     const { data: periodAttendance, error: attendanceError } = await supabase!.from('employee_attendance')
       .select('employee_id,work_date,check_in,check_out,break_minutes,status')
       .gte('work_date',payrollStart).lte('work_date',payrollEnd).limit(10000)
@@ -803,14 +799,14 @@ export default function App() {
             <div><small>ATTENDANCE DATE</small><input type="date" value={attendanceDate} onChange={e=>setAttendanceDate(e.target.value)}/></div>
             {['Admin','Manager'].includes(currentEmployeeRole||'') && <div><small>EMPLOYEE</small><select value={attendanceEmployeeId || (employees.find(e=>e.auth_user_id===session?.user.id)?.id || '')} onChange={e=>setAttendanceEmployeeId(e.target.value)}><option value="">Select employee</option>{employees.filter(e=>e.status==='Active').map(e=><option key={e.id} value={e.id}>{e.employee_no} – {e.full_name}</option>)}</select></div>}
             <div className="punch-actions">
-              {(() => { const own=employees.find(e=>e.auth_user_id===session?.user.id); const targetId=['Admin','Manager'].includes(currentEmployeeRole||'')?(attendanceEmployeeId||own?.id||''):(own?.id||''); const todayRecord=attendanceRecords.find(r=>r.employee_id===targetId&&r.work_date===attendanceDate); return <><button className="primary" disabled={busy||!targetId||!!todayRecord?.check_in||attendanceDate!==localBusinessDate()} onClick={()=>void punchIn(targetId)}>Check in</button><button disabled={busy||!todayRecord?.check_in||!!todayRecord?.check_out||attendanceDate!==new Date().toISOString().slice(0,10)} onClick={()=>void punchOut(todayRecord)}>Check out</button><span className="muted">{attendanceDate!==new Date().toISOString().slice(0,10)?'Punching is available for today only.':todayRecord?.check_in?todayRecord.check_out?'Shift completed': 'Checked in at '+new Date(todayRecord.check_in).toLocaleTimeString(): 'No check-in recorded for this date.'}</span></> })()}
+              {(() => { const own=employees.find(e=>e.auth_user_id===session?.user.id); const targetId=['Admin','Manager'].includes(currentEmployeeRole||'')?(attendanceEmployeeId||own?.id||''):(own?.id||''); const todayRecord=attendanceRecords.find(r=>r.employee_id===targetId&&r.work_date===attendanceDate); return <><button className="primary" disabled={busy||!targetId||!!todayRecord?.check_in||attendanceDate!==localBusinessDate()} onClick={()=>void punchIn(targetId)}>Check in</button><button disabled={busy||!todayRecord?.check_in||!!todayRecord?.check_out||attendanceDate!==new Date().toISOString().slice(0,10)} onClick={()=>void punchOut(todayRecord)}>Check out</button><span className="muted">{attendanceDate!==new Date().toISOString().slice(0,10)?'Punching is available for today only.':todayRecord?.check_in?todayRecord.check_out?'Shift completed': 'Checked in at '+new Date(todayRecord.check_in).toLocaleTimeString('en-LK',{timeZone:'Asia/Colombo'}): 'No check-in recorded for this date.'}</span></> })()}
             </div>
           </article>
           {!session && supabaseConfigured && <article><p>Please sign in to record attendance.</p></article>}
           {session && !employees.some(e=>e.auth_user_id===session.user.id) && !['Admin','Manager'].includes(currentEmployeeRole||'') && <article><p>Your login is not linked to an active employee record. Ask an administrator to link your Supabase Auth User ID in Employee Management.</p></article>}
           <article><div className="toolbar"><div><h3>Daily attendance</h3><p className="muted">{attendanceRecords.filter(r=>r.work_date===attendanceDate).length} records for {attendanceDate}</p></div><button onClick={()=>void loadAttendance()}>Refresh records</button></div>
             <div className="tablewrap"><table><thead><tr><th>EMPLOYEE</th><th>CHECK IN</th><th>CHECK OUT</th><th>BREAK (MIN)</th><th>HOURS</th><th>STATUS</th></tr></thead><tbody>
-              {attendanceRecords.filter(r=>r.work_date===attendanceDate).map(r=>{const p=Array.isArray(r.employees)?r.employees[0]:r.employees;return <tr key={r.id}><td><b>{p?.employee_no||'—'} {p?.full_name||'Employee'}</b><small>{p?.job_title||''}</small></td><td>{r.check_in?new Date(r.check_in).toLocaleTimeString():'—'}</td><td>{r.check_out?new Date(r.check_out).toLocaleTimeString():'—'}</td><td>{['Admin','Manager'].includes(currentEmployeeRole||'')?<input className="break-input" type="number" min="0" max="600" defaultValue={r.break_minutes||0} onBlur={e=>void updateAttendanceBreak(r,Number(e.target.value))}/>:r.break_minutes||0}</td><td>{r.check_out?attendanceHours(r).toFixed(2)+' h':'In progress'}</td><td>{['Admin','Manager'].includes(currentEmployeeRole||'')?<select value={r.status} onChange={e=>void updateAttendanceStatus(r,e.target.value)}>{['Present','Late','Half-day','Leave','Absent'].map(x=><option key={x}>{x}</option>)}</select>:r.status}</td></tr>})}
+              {attendanceRecords.filter(r=>r.work_date===attendanceDate).map(r=>{const p=Array.isArray(r.employees)?r.employees[0]:r.employees;return <tr key={r.id}><td><b>{p?.employee_no||'—'} {p?.full_name||'Employee'}</b><small>{p?.job_title||''}</small></td><td>{r.check_in?new Date(r.check_in).toLocaleTimeString('en-LK',{timeZone:'Asia/Colombo'}):'—'}</td><td>{r.check_out?new Date(r.check_out).toLocaleTimeString('en-LK',{timeZone:'Asia/Colombo'}):'—'}</td><td>{['Admin','Manager'].includes(currentEmployeeRole||'')?<input className="break-input" type="number" min="0" max="600" defaultValue={r.break_minutes||0} onBlur={e=>void updateAttendanceBreak(r,Number(e.target.value))}/>:r.break_minutes||0}</td><td>{r.check_out?attendanceHours(r).toFixed(2)+' h':'In progress'}</td><td>{['Admin','Manager'].includes(currentEmployeeRole||'')?<select value={r.status} onChange={e=>void updateAttendanceStatus(r,e.target.value)}>{['Present','Late','Half-day','Leave','Absent'].map(x=><option key={x}>{x}</option>)}</select>:r.status}</td></tr>})}
               {attendanceRecords.filter(r=>r.work_date===attendanceDate).length===0&&<tr><td colSpan={6}>No attendance records for this date.</td></tr>}
             </tbody></table></div>
           </article>
