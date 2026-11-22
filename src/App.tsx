@@ -11,7 +11,11 @@ const demoVariants: ProductVariant[] = [
   { id: 'v1', product_id: '1', size: 'M', colour: 'Black', barcode: '200000000001', quantity: 12, reorder_level: 5 },
   { id: 'v2', product_id: '1', size: 'L', colour: 'Black', barcode: '200000000002', quantity: 3, reorder_level: 5 },
 ]
-type POSVariant = ProductVariant & { product_no: string; product_name: string; sku: string; selling_price: number }\ntype CartLine = { variant_id: string; product_no: string; name: string; sku: string; size: string; colour: string; unit_price: number; quantity: number; available: number }\ntype Invoice = { invoice_no: string; subtotal: number; discount: number; total: number; amount_received: number; change_amount: number; payment_method: string; created_at: string; items: CartLine[] }\n\nconst navigation = ['Overview', 'Point of Sale', 'Products & Stock', 'Purchases', 'Customers', 'Suppliers', 'Expenses', 'Reports', 'Employees', 'Settings']
+type POSVariant = ProductVariant & { product_no: string; product_name: string; sku: string; selling_price: number }
+type CartLine = { variant_id: string; product_no: string; name: string; sku: string; size: string; colour: string; unit_price: number; quantity: number; available: number }
+type Invoice = { invoice_no: string; subtotal: number; discount: number; total: number; amount_received: number; change_amount: number; payment_method: string; created_at: string; items: CartLine[] }
+
+const navigation = ['Overview', 'Point of Sale', 'Products & Stock', 'Purchases', 'Customers', 'Suppliers', 'Expenses', 'Reports', 'Employees', 'Settings']
 
 export default function App() {
   const [products, setProducts] = useState<Product[]>(demo)
