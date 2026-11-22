@@ -224,6 +224,8 @@ export default function App() {
     if (employees.filter(e=>e.status==='Active').length===0) { setNotice('No active employees are available for payroll.'); return }
     const duplicate=payrollRuns.find(r=>r.period_start===payrollStart && r.period_end===payrollEnd)
     if (duplicate) { setNotice(duplicate.status==='Paid'?'This payroll period has already been paid.':'A draft payroll already exists for this period.'); return }
+    const overlap=payrollRuns.find(r=>payrollStart<=r.period_end && payrollEnd>=r.period_start)
+    if (overlap) { setNotice('This date range overlaps an existing payroll run. Choose a non-overlapping period.'); return }
     setBusy(true)
     const active=employees.filter(e=>e.status==='Active' && (!e.hire_date || e.hire_date<=payrollEnd))
     if (active.length===0) { setNotice('No active employees were employed during this payroll period.'); setBusy(false); return }
@@ -248,6 +250,7 @@ export default function App() {
     if(itemError){await supabase!.from('payroll_runs').delete().eq('id',run.id);setNotice(itemError.message);setBusy(false);return}
     setNotice('Draft payroll created. Review the figures before marking it as paid.')
     setPayrollAttendance(periodAttendance||[])
+    setPayrollDeductions({})
     await loadPayrollRuns()
     setBusy(false)
   }
@@ -799,9 +802,9 @@ export default function App() {
               <p className="muted">Create login accounts in Supabase Dashboard → Authentication → Users. Then copy the user's UUID into the Auth User ID field. This app does not create passwords or send invitations.</p>
             </article>}
             <article><div className="toolbar"><div><h3>Employee directory ({employees.length})</h3><p className="muted">Your access level: {currentEmployeeRole}</p></div><input placeholder="Search name, role, department or phone…" value={employeeQuery} onChange={e=>setEmployeeQuery(e.target.value)}/></div>
-              <div className="tablewrap"><table><thead><tr><th>EMPLOYEE NO.</th><th>EMPLOYEE</th><th>CONTACT</th><th>DEPARTMENT / TITLE</th><th>ROLE</th><th>STATUS</th>{currentEmployeeRole==='Admin'&&<th>ACTION</th>}</tr></thead><tbody>
-                {employees.filter(e=>`${e.employee_no||''} ${e.full_name||''} ${e.email||''} ${e.phone||''} ${e.department||''} ${e.job_title||''} ${e.role||''}`.toLowerCase().includes(employeeQuery.toLowerCase())).map(e=><tr key={e.id}><td><b>{e.employee_no||'—'}</b></td><td>{e.full_name}<small>{e.email||'No email recorded'}</small></td><td>{e.phone||'—'}</td><td>{e.department||'—'}<small>{e.job_title||''}</small></td><td><span className="employee-role">{e.role}</span>{!e.auth_user_id&&<small>Login not linked</small>}</td><td><span className={e.status==='Active'?'stock-ok':'stock-low'}>{e.status}</span></td>{currentEmployeeRole==='Admin'&&<td><button className="small-action" onClick={()=>editEmployee(e)}>Edit</button></td>}</tr>)}
-                {employees.filter(e=>`${e.employee_no||''} ${e.full_name||''} ${e.email||''} ${e.phone||''} ${e.department||''} ${e.job_title||''} ${e.role||''}`.toLowerCase().includes(employeeQuery.toLowerCase())).length===0&&<tr><td colSpan={currentEmployeeRole==='Admin'?7:6}>No employees found.</td></tr>}
+              <div className="tablewrap"><table><thead><tr><th>EMPLOYEE NO.</th><th>EMPLOYEE</th><th>CONTACT</th><th>DEPARTMENT / TITLE</th><th>ROLE</th><th>STATUS</th><th>PAY BASIS / RATE</th>{currentEmployeeRole==='Admin'&&<th>ACTION</th>}</tr></thead><tbody>
+                {employees.filter(e=>`${e.employee_no||''} ${e.full_name||''} ${e.email||''} ${e.phone||''} ${e.department||''} ${e.job_title||''} ${e.role||''}`.toLowerCase().includes(employeeQuery.toLowerCase())).map(e=><tr key={e.id}><td><b>{e.employee_no||'—'}</b></td><td>{e.full_name}<small>{e.email||'No email recorded'}</small></td><td>{e.phone||'—'}</td><td>{e.department||'—'}<small>{e.job_title||''}</small></td><td><span className="employee-role">{e.role}</span>{!e.auth_user_id&&<small>Login not linked</small>}</td><td><span className={e.status==='Active'?'stock-ok':'stock-low'}>{e.status}</span></td><td>{e.salary_basis||'Monthly'}<small>{money(Number(e.base_salary||0))} {e.salary_basis==='Hourly'?'/ hour':'/ month'}</small></td>{currentEmployeeRole==='Admin'&&<td><button className="small-action" onClick={()=>editEmployee(e)}>Edit</button></td>}</tr>)}
+                {employees.filter(e=>`${e.employee_no||''} ${e.full_name||''} ${e.email||''} ${e.phone||''} ${e.department||''} ${e.job_title||''} ${e.role||''}`.toLowerCase().includes(employeeQuery.toLowerCase())).length===0&&<tr><td colSpan={currentEmployeeRole==='Admin'?8:7}>No employees found.</td></tr>}
               </tbody></table></div>
             </article>
           </>}
