@@ -707,7 +707,7 @@ export default function App() {
       setEmployees(current => employeeEditingId ? current.map(e=>e.id===employeeEditingId?local:e) : [local,...current])
       setNotice('Demo mode: employee record is temporary.')
       setEmployeeEditingId(null)
-      setEmployeeForm({ full_name: '', email: '', phone: '', job_title: '', department: '', employment_type: 'Full-time', hire_date: new Date().toISOString().slice(0,10), auth_user_id: '', role: 'Staff', status: 'Active', notes: '' })
+      setEmployeeForm({ full_name: '', email: '', phone: '', job_title: '', department: '', employment_type: 'Full-time', hire_date: new Date().toISOString().slice(0,10), auth_user_id: '', role: 'Staff', status: 'Active', salary_basis: 'Monthly', base_salary: '0', notes: '' })
     }
     setBusy(false)
   }
