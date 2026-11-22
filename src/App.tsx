@@ -573,7 +573,7 @@ export default function App() {
   </form></div>
 
   return <div className="shell">
-    <aside><h2>◈ Clothing ERP</h2><small>RETAIL MANAGEMENT</small>{navigation.map(item => <button key={item} className={page === item ? 'active' : ''} onClick={() => setPage(item)}>{item}</button>)}</aside>
+    <aside><h2>◈ Clothing ERP</h2><small>RETAIL MANAGEMENT</small>{(supabaseConfigured && session ? (currentEmployeeRole === 'Admin' ? navigation : currentEmployeeRole === 'Manager' ? navigation.filter(item=>item!=='Settings') : currentEmployeeRole === 'Cashier' ? ['Overview','Point of Sale','Sales History','Customers','Employees'] : currentEmployeeRole === 'Staff' ? ['Overview','Products & Stock','Employees'] : ['Overview','Employees']) : navigation).map(item => <button key={item} className={page === item ? 'active' : ''} onClick={() => setPage(item)}>{item}</button>)}</aside>
     <main><header><b>Workspace / {page}</b><div className="header-actions"><span className={supabaseConfigured ? 'ok' : 'demo'}>{supabaseConfigured ? 'Supabase connected' : 'Demo mode'}</span>{session && <button className="text-button" onClick={() => void signOut()}>Sign out</button>}</div></header>
       <section>
         {notice && <p className="notice">{notice}<button className="dismiss" onClick={() => setNotice('')}>×</button></p>}
