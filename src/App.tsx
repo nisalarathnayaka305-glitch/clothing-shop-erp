@@ -167,6 +167,8 @@ export default function App() {
   const [attendanceRecords, setAttendanceRecords] = useState<any[]>([])
   const [attendanceDate, setAttendanceDate] = useState(localBusinessDate())
   const [attendanceEmployeeId, setAttendanceEmployeeId] = useState('')
+  const [attendanceScanOpen, setAttendanceScanOpen] = useState(false)
+  const [attendanceQrToken, setAttendanceQrToken] = useState('')
   const [payrollRuns, setPayrollRuns] = useState<any[]>([])
   const [payrollAttendance, setPayrollAttendance] = useState<any[]>([])
   const [payrollStart, setPayrollStart] = useState(localBusinessMonthRange().start)
@@ -192,6 +194,43 @@ export default function App() {
   }, [])
 
   useEffect(() => { document.documentElement.dataset.theme = companySettings.theme_mode || 'light' }, [companySettings.theme_mode])
+
+  useEffect(() => {
+    if (!attendanceScanOpen || page !== 'Attendance' || !session || !supabase) return
+    let scanner: Html5Qrcode | null = null
+    let active = true
+    let handled = false
+    const start = async () => {
+      try {
+        scanner = new Html5Qrcode('erp-attendance-qr-reader')
+        await scanner.start({ facingMode: 'environment' }, { fps: 10, qrbox: { width: 240, height: 240 } }, async decoded => {
+          if (!active || handled) return
+          handled = true
+          try { await scanner?.stop() } catch {}
+          const { data, error } = await supabase!.rpc('scan_daily_attendance_qr', { p_token: decoded.trim() })
+          if (!active) return
+          if (error) setNotice(error.message)
+          else {
+            const result = Array.isArray(data) ? data[0] : data
+            setNotice(`${result?.action || 'Attendance'} recorded for ${result?.employee_name || 'you'} at ${new Date(result?.punch_time || Date.now()).toLocaleTimeString('en-LK', { timeZone: 'Asia/Colombo' })}.`)
+            setAttendanceScanOpen(false)
+            await loadAttendance()
+          }
+        }, () => {})
+      } catch (error) {
+        if (active) {
+          setNotice(error instanceof Error ? error.message : 'Unable to start the camera. Allow camera access and use HTTPS.')
+          setAttendanceScanOpen(false)
+        }
+      }
+    }
+    void start()
+    return () => {
+      active = false
+      if (scanner?.isScanning) void scanner.stop().catch(() => {})
+    }
+  }, [attendanceScanOpen, page, session])
+
 
   useEffect(() => {
     if (supabase && session) void loadCompanySettings()
@@ -313,6 +352,16 @@ export default function App() {
       .order('period_start', { ascending: false }).limit(24)
     if (error) setNotice(error.message)
     else if (data) setPayrollRuns(data)
+  }
+
+
+  async function loadAttendanceQr() {
+    if (!supabase || !session || !['Admin','Manager'].includes(currentEmployeeRole || '')) return
+    setBusy(true)
+    const { data, error } = await supabase.rpc('get_or_create_daily_attendance_qr')
+    if (error) setNotice(error.message)
+    else { setAttendanceQrToken(String(data)); setNotice('Fixed office attendance QR is ready to print.') }
+    setBusy(false)
   }
 
   async function punchIn(employeeId: string) {
@@ -1374,6 +1423,15 @@ export default function App() {
           </article>
           {!session && supabaseConfigured && <article><p>Please sign in to record attendance.</p></article>}
           {session && !employees.some(e=>e.auth_user_id===session.user.id) && !['Admin','Manager'].includes(currentEmployeeRole||'') && <article><p>Your login is not linked to an active employee record. Ask an administrator to link your Supabase Auth User ID in Employee Management.</p></article>}
+          <article className="attendance-qr-panel">
+            <div><h3>Office QR attendance</h3><p className="muted">Scan the fixed office QR from your phone. First scan records Check-in; the next scan records Check-out. Both update this same attendance register.</p></div>
+            <div className="attendance-qr-actions">
+              <button className="primary" onClick={()=>setAttendanceScanOpen(v=>!v)}>{attendanceScanOpen?'Close QR scanner':'Scan office QR'}</button>
+              {['Admin','Manager'].includes(currentEmployeeRole||'')&&<button onClick={()=>void loadAttendanceQr()} disabled={busy}>Show / Print office QR</button>}
+            </div>
+            {attendanceScanOpen&&<div className="attendance-camera-wrap"><div id="erp-attendance-qr-reader"/><p className="muted">Allow camera permission and point your rear camera at the printed office QR.</p></div>}
+            {attendanceQrToken&&['Admin','Manager'].includes(currentEmployeeRole||'')&&<div className="attendance-qr-print"><QRCodeSVG value={attendanceQrToken} size={220} level="H" includeMargin/><p>FIXED OFFICE ATTENDANCE QR</p><button onClick={()=>window.print()}>Print QR</button></div>}
+          </article>
           <article><div className="toolbar"><div><h3>Daily attendance</h3><p className="muted">{attendanceRecords.filter(r=>r.work_date===attendanceDate).length} records for {attendanceDate}</p></div><button onClick={()=>void loadAttendance()}>Refresh records</button></div>
             <div className="tablewrap"><table><thead><tr><th>EMPLOYEE</th><th>CHECK IN</th><th>CHECK OUT</th><th>BREAK (MIN)</th><th>HOURS</th><th>STATUS</th></tr></thead><tbody>
               {attendanceRecords.filter(r=>r.work_date===attendanceDate).map(r=>{const p=Array.isArray(r.employees)?r.employees[0]:r.employees;return <tr key={r.id}><td><b>{p?.employee_no||'—'} {p?.full_name||'Employee'}</b><small>{p?.job_title||''}</small></td><td>{r.check_in?new Date(r.check_in).toLocaleTimeString('en-LK',{timeZone:'Asia/Colombo'}):'—'}</td><td>{r.check_out?new Date(r.check_out).toLocaleTimeString('en-LK',{timeZone:'Asia/Colombo'}):'—'}</td><td>{['Admin','Manager'].includes(currentEmployeeRole||'')?<input className="break-input" type="number" min="0" max="600" defaultValue={r.break_minutes||0} onBlur={e=>void updateAttendanceBreak(r,Number(e.target.value))}/>:r.break_minutes||0}</td><td>{r.check_out?attendanceHours(r).toFixed(2)+' h':'In progress'}</td><td>{['Admin','Manager'].includes(currentEmployeeRole||'')?<select value={r.status} onChange={e=>void updateAttendanceStatus(r,e.target.value)}>{['Present','Late','Half-day','Leave','Absent'].map(x=><option key={x}>{x}</option>)}</select>:r.status}</td></tr>})}
