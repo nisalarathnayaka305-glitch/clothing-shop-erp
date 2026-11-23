@@ -151,8 +151,8 @@ export default function App() {
       event.target.value = ''
       return
     }
-    if (file.size > 1024 * 1024) {
-      setNotice('Logo must be smaller than 1 MB.')
+    if (file.size > 2 * 1024 * 1024) {
+      setNotice('Logo must be smaller than 2 MB.')
       event.target.value = ''
       return
     }
@@ -1445,7 +1445,7 @@ export default function App() {
               </div>
               <div className="company-brand-copy">
                 <h3>Company branding</h3>
-                <p className="muted">Upload a clear PNG, JPG or WebP logo (maximum 1 MB). It will appear in the ERP and on printed invoices.</p>
+                <p className="muted">Upload a clear PNG, JPG or WebP logo (maximum 2 MB). It will appear in the ERP and on printed invoices.</p>
                 <div className="logo-actions"><label className="logo-upload">Choose logo<input type="file" accept="image/png,image/jpeg,image/webp" onChange={handleCompanyLogo}/></label>{companySettings.logo_data_url&&<button type="button" className="secondary-action" onClick={()=>setCompanySettings((current:any)=>({...current,logo_data_url:''}))}>Remove logo</button>}</div>
               </div>
             </article>
