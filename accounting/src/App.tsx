@@ -73,7 +73,7 @@ function App() {
   const [role, setRole] = useState<string | null>(null)
   const [companySettings, setCompanySettings] = useState({ company_name: 'Clothing Shop', tagline: 'ACCOUNTING', logo_data_url: '' })
   const [tab, setTab] = useState<Tab>('overview')
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => { try { return window.localStorage.getItem('clothing-erp-accounting-sidebar-hidden') === 'true' } catch { return false } })
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => { try { return window.localStorage.getItem('clothing-erp-sidebar-hidden') === 'true' } catch { return false } })
   useEffect(() => { try { window.localStorage.setItem('clothing-erp-accounting-sidebar-hidden', String(sidebarCollapsed)) } catch {} }, [sidebarCollapsed])
   const [accounts, setAccounts] = useState<Account[]>([])
   const [entries, setEntries] = useState<Entry[]>([])
