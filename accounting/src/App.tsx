@@ -253,7 +253,7 @@ function App() {
 
   async function handleSignOut() {
     await supabase.auth.signOut()
-    setUser(null); setRole(null); setAccounts([]); setEntries([]); setPeriods([])
+    setUser(null); setRole(null); setAccounts([]); setEntries([]); setPeriods([]); setInventoryRows([])
   }
 
   async function saveJournal(event: FormEvent<HTMLFormElement>) {
