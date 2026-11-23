@@ -40,6 +40,7 @@ type Tab = 'overview' | 'profit' | 'balance' | 'trial' | 'inventory' | 'journals
 
 const today = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Colombo' }).format(new Date())
 const monthStart = () => today().slice(0, 7) + '-01'
+const financialYearStart = () => { const d=today(); const y=Number(d.slice(0,4)); return d.slice(5,7)>='04' ? `${y}-04-01` : `${y-1}-04-01` }
 const money = (value: number) => new Intl.NumberFormat('en-LK', { style: 'currency', currency: 'LKR', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number.isFinite(value) ? value : 0)
 const amount = (value: unknown) => Number(value || 0)
 const accountTypes: AccountType[] = ['Asset','Liability','Equity','Revenue','Contra Revenue','Cost of Sales','Expense','Other Income','Other Expense']
@@ -82,7 +83,7 @@ function App() {
   const [saving, setSaving] = useState(false)
   const [notice, setNotice] = useState('')
   const [error, setError] = useState('')
-  const [fromDate, setFromDate] = useState(monthStart())
+  const [fromDate, setFromDate] = useState(financialYearStart())
   const [toDate, setToDate] = useState(today())
   const [asAtDate, setAsAtDate] = useState(today())
   const [selectedAccount, setSelectedAccount] = useState('')
@@ -211,6 +212,14 @@ function App() {
   }
 
   const pnl = useMemo(() => pnlFor(fromDate, toDate), [postedEntries, accounts, fromDate, toDate])
+  const operatingExpenseLines = useMemo(() => postedEntries
+    .filter(entry => entry.entry_date >= fromDate && entry.entry_date <= toDate)
+    .flatMap(entry => (entry.acct_journal_lines || []).flatMap(line => {
+      const account = accountById.get(line.account_id)
+      const debit = amount(line.debit)
+      if (!account || !['Expense','Other Expense'].includes(account.account_type) || debit <= 0) return []
+      return [{ date: entry.entry_date, entryNo: entry.entry_no, description: entry.description, reference: entry.reference, code: account.code, account: account.name, memo: line.memo || '', amount: debit }]
+    })), [postedEntries, accountById, fromDate, toDate])
   const balance = useMemo(() => {
     const totals = totalsFor(null, asAtDate)
     const rows = accounts.map(account => {
@@ -374,7 +383,7 @@ function App() {
           </section>}
 
           {tab==='profit'&&<section className="view-stack">
-            <div className="report-toolbar"><div className="date-field"><label>From<input type="date" value={fromDate} onChange={e=>setFromDate(e.target.value)}/></label><label>To<input type="date" value={toDate} onChange={e=>setToDate(e.target.value)}/></label></div><div className="toolbar-buttons"><button className="secondary-button" onClick={()=>window.print()}>Print</button><button className="secondary-button" onClick={()=>downloadCsv('profit-and-loss.csv',[['Account','Amount'],['Sales Revenue',pnl.revenue],['Sales Discounts and Returns',-pnl.contraRevenue],['Net Sales',pnl.netSales],['Cost of Goods Sold',-pnl.cogs],['Gross Profit',pnl.grossProfit],['Operating Expenses',-pnl.operatingExpenses],['Other Income',pnl.otherIncome],['Other Expenses',-pnl.otherExpenses],['Net Profit / (Loss)',pnl.netProfit]])}>Export CSV</button></div></div>
+            <div className="report-toolbar"><div className="date-field"><label>From<input type="date" value={fromDate} onChange={e=>setFromDate(e.target.value)}/></label><label>To<input type="date" value={toDate} onChange={e=>setToDate(e.target.value)}/></label><button className="secondary-button" onClick={()=>{const start=financialYearStart();setFromDate(start);setToDate(today())}}>Current financial year</button><button className="secondary-button" onClick={()=>{const start=financialYearStart();const prior=Number(start.slice(0,4))-1;setFromDate(`${prior}-04-01`);setToDate(`${Number(start.slice(0,4))}-03-31`)}}>Previous financial year</button></div><div className="toolbar-buttons"><button className="secondary-button" onClick={()=>window.print()}>Print</button><button className="secondary-button" onClick={()=>downloadCsv('profit-and-loss.csv',[['Account','Amount'],['Sales Revenue',pnl.revenue],['Sales Discounts and Returns',-pnl.contraRevenue],['Net Sales',pnl.netSales],['Cost of Goods Sold',-pnl.cogs],['Gross Profit',pnl.grossProfit],['Operating Expenses',-pnl.operatingExpenses],['Other Income',pnl.otherIncome],['Other Expenses',-pnl.otherExpenses],['Net Profit / (Loss)',pnl.netProfit],[],['DATE','ENTRY','EXPENSE ACCOUNT','DESCRIPTION','REFERENCE','DETAIL','AMOUNT'],...operatingExpenseLines.map(x=>[x.date,x.entryNo,x.account,x.description,x.reference||'',x.memo,x.amount])])}>Export CSV</button></div></div>
             <div className="statement panel"><div className="statement-title"><p className="eyebrow">FINANCIAL STATEMENT</p><h2>Profit & Loss Statement</h2><p>For the period {fromDate} to {toDate}</p></div>
               <StatementRow label="Sales Revenue" value={pnl.revenue}/><StatementRow label="Less: Discounts and Returns" value={-pnl.contraRevenue} negative/><StatementTotal label="Net Sales" value={pnl.netSales}/>
               <StatementRow label="Cost of Goods Sold" value={-pnl.cogs} negative/><StatementTotal label="Gross Profit" value={pnl.grossProfit}/>
@@ -384,6 +393,7 @@ function App() {
             </div>
             <AccountBreakdown title="Revenue and income accounts" rows={pnl.values.filter(row=>['Revenue','Contra Revenue','Other Income'].includes(row.account.account_type))}/>
             <AccountBreakdown title="Cost and expense accounts" rows={pnl.values.filter(row=>['Cost of Sales','Expense','Other Expense'].includes(row.account.account_type))}/>
+            <div className="panel"><div className="panel-heading"><div><h2>Operating Expense Details</h2><p>Individual expense entries included in Operating Expenses and Other Expenses for this period.</p></div><strong>{money(operatingExpenseLines.reduce((sum,row)=>sum+row.amount,0))}</strong></div><div className="table-wrap"><table><thead><tr><th>DATE</th><th>ENTRY</th><th>EXPENSE ACCOUNT</th><th>DESCRIPTION</th><th>DETAIL</th><th className="num">AMOUNT</th></tr></thead><tbody>{operatingExpenseLines.map((row,index)=><tr key={row.entryNo+'-'+row.code+'-'+index}><td>{row.date}</td><td>{row.entryNo}</td><td>{row.code} · {row.account}</td><td>{row.description}</td><td>{row.memo||'—'}</td><td className="num">{money(row.amount)}</td></tr>)}{operatingExpenseLines.length===0&&<tr><td colSpan={6}>No operating expense transactions were posted for this period.</td></tr>}</tbody></table></div></div>
           </section>}
 
           {tab==='balance'&&<section className="view-stack">
