@@ -188,30 +188,30 @@ tbody tr:hover td{background:#f9fbfe}
 
 
 /* =========================================================
-   WENODO DESIGN SYSTEM — accounting workspace
+   CLOTHING SHOP ERP DESIGN SYSTEM — accounting workspace
    Matched to the retail ERP and supplied visual reference
 ========================================================= */
 :root{
-  --wenodo-purple:#5148ed;
-  --wenodo-cyan:#08b8d4;
-  --wenodo-ink:#17233c;
-  --wenodo-muted:#667b98;
-  --wenodo-bg:#f3f5fb;
-  --wenodo-border:#e1e8f2;
+  --erp-purple:#5148ed;
+  --erp-cyan:#08b8d4;
+  --erp-ink:#17233c;
+  --erp-muted:#667b98;
+  --erp-bg:#f3f5fb;
+  --erp-border:#e1e8f2;
   font-family:Inter,"Segoe UI",Arial,sans-serif;
-  color:var(--wenodo-ink);
-  background:var(--wenodo-bg);
+  color:var(--erp-ink);
+  background:var(--erp-bg);
 }
 *{box-sizing:border-box}
-body{margin:0;min-width:320px;background:var(--wenodo-bg);color:var(--wenodo-ink);font-family:Inter,"Segoe UI",Arial,sans-serif}
+body{margin:0;min-width:320px;background:var(--erp-bg);color:var(--erp-ink);font-family:Inter,"Segoe UI",Arial,sans-serif}
 button,input,select{font:inherit}
 button{cursor:pointer;transition:background .17s ease,border-color .17s ease,transform .17s ease,box-shadow .17s ease}
 button:disabled{opacity:.55;cursor:not-allowed}
-.app-shell{min-height:100vh;display:flex;background:var(--wenodo-bg)}
+.app-shell{min-height:100vh;display:flex;background:var(--erp-bg)}
 .sidebar{
-  width:310px;flex:0 0 310px;background:#fff;color:var(--wenodo-ink);
+  width:310px;flex:0 0 310px;background:#fff;color:var(--erp-ink);
   display:flex;flex-direction:column;padding:27px 15px 18px;
-  border-right:1px solid var(--wenodo-border);box-shadow:none;
+  border-right:1px solid var(--erp-border);box-shadow:none;
 }
 .brand{
   display:flex;align-items:center;justify-content:center;min-height:66px;
@@ -225,23 +225,23 @@ button:disabled{opacity:.55;cursor:not-allowed}
   color:#61738d;text-align:left;border-radius:16px;padding:11px 14px;
   display:flex;align-items:center;gap:12px;font-size:14px;font-weight:600;margin:5px 0;
 }
-.nav-item:hover{background:#f6f7ff;color:var(--wenodo-purple)}
+.nav-item:hover{background:#f6f7ff;color:var(--erp-purple)}
 .nav-item.active{
-  background:#ecebff;color:var(--wenodo-purple);border-color:var(--wenodo-cyan);
+  background:#ecebff;color:var(--erp-purple);border-color:var(--erp-cyan);
   box-shadow:0 2px 7px rgba(81,72,237,.07);
 }
 .nav-dot{width:19px;height:19px;flex:0 0 19px;border-radius:6px;background:#eef0ff}
-.nav-item.active .nav-dot{background:var(--wenodo-purple)}
+.nav-item.active .nav-dot{background:var(--erp-purple)}
 .sidebar-bottom{
   margin-top:auto;border-top:1px solid #edf1f7;padding:18px 8px 0;
   font-size:11px;color:#71849e;
 }
 .sidebar-bottom small{display:block;margin:7px 0 12px 15px;color:#8797ad}
-.sidebar-bottom button{border:0;background:#f3f4ff;color:var(--wenodo-purple);padding:9px 12px;border-radius:9px;font-size:12px;font-weight:700}
+.sidebar-bottom button{border:0;background:#f3f4ff;color:var(--erp-purple);padding:9px 12px;border-radius:9px;font-size:12px;font-weight:700}
 .status-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#19b77c;margin-right:7px}
-.main-area{min-width:0;flex:1;background:var(--wenodo-bg)}
+.main-area{min-width:0;flex:1;background:var(--erp-bg)}
 .topbar{
-  height:76px;background:#fff;border-bottom:1px solid var(--wenodo-border);
+  height:76px;background:#fff;border-bottom:1px solid var(--erp-border);
   display:flex;align-items:center;justify-content:space-between;padding:0 34px;
   position:sticky;top:0;z-index:5;
 }
@@ -250,7 +250,7 @@ button:disabled{opacity:.55;cursor:not-allowed}
 .topbar strong{color:#192a47;font-size:14px;font-weight:750}
 .top-actions{display:flex;align-items:center;gap:12px}
 .user-chip{background:#f5f7fc;border:1px solid #e6ebf3;color:#647993;padding:8px 12px;border-radius:30px;font-size:11px}
-.icon-button{border:1px solid #e1e8f2;background:#fff;color:var(--wenodo-purple);border-radius:10px;padding:8px 12px}
+.icon-button{border:1px solid #e1e8f2;background:#fff;color:var(--erp-purple);border-radius:10px;padding:8px 12px}
 .page-content{width:100%;max-width:1650px;margin:0 auto;padding:30px 34px 46px}
 .page-heading{margin-bottom:23px}
 .page-heading h1{font-size:29px;letter-spacing:-.65px;color:#17233c;font-weight:800;margin:5px 0 6px}
@@ -258,17 +258,17 @@ button:disabled{opacity:.55;cursor:not-allowed}
 .eyebrow{font-size:10px;letter-spacing:1.25px;color:#6479a0;font-weight:800}
 .metric-grid{gap:16px;margin:22px 0}
 .metric-card,.panel,.statement{
-  background:#fff;border:1px solid var(--wenodo-border);border-radius:18px;
+  background:#fff;border:1px solid var(--erp-border);border-radius:18px;
   box-shadow:0 7px 24px rgba(36,57,93,.045);
 }
 .metric-card{padding:21px}
 .metric-card small,.metric-card span{font-size:11px;color:#6d8099;font-weight:700}
-.metric-card strong{font-size:27px;letter-spacing:-.5px;color:var(--wenodo-purple)}
+.metric-card strong{font-size:27px;letter-spacing:-.5px;color:var(--erp-purple)}
 .panel{padding:23px}
 .panel-heading h2,.panel h2,.panel h3{color:#192a47;font-weight:750}
 .statement{padding:30px}
 .primary-button{
-  background:linear-gradient(105deg,var(--wenodo-purple),var(--wenodo-cyan));
+  background:linear-gradient(105deg,var(--erp-purple),var(--erp-cyan));
   border:0;color:#fff;border-radius:13px;padding:11px 17px;font-weight:750;
   box-shadow:0 6px 15px rgba(67,105,221,.15);
 }
@@ -401,3 +401,8 @@ tbody tr:hover td{background:#fafbff}
 }
 .app-shell.sidebar-collapsed .sidebar-logout-label{display:none}
 .sidebar-bottom button svg{vertical-align:middle}
+
+
+/* Sidebar can be fully hidden and restored from the accounting header. */
+.app-shell.sidebar-hidden .sidebar{display:none!important}
+.app-shell.sidebar-hidden .main-area{width:100%;min-width:0}
