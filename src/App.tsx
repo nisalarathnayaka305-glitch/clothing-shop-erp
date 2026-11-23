@@ -55,9 +55,10 @@ function PhoneBarcodeScanner({sessionId,allowed}:{sessionId:string;allowed:boole
   const [lastCode,setLastCode]=useState('')
   const [scanChannel,setScanChannel]=useState<any>(null)
   useEffect(()=>{
-    if(!supabase||!allowed){setStatus('Please sign in with an Admin, Manager or Cashier account.');return}
-    const channel=supabase.channel(`pos-scan-${sessionId}`).subscribe(state=>{if(state==='SUBSCRIBED'){setScanChannel(channel);setStatus('Connected. Scan a product barcode.')}})
-    return()=>{setScanChannel(null);void supabase.removeChannel(channel)}
+    const client=supabase
+    if(!client||!allowed){setStatus('Please sign in with an Admin, Manager or Cashier account.');return}
+    const channel=client.channel(`pos-scan-${sessionId}`).subscribe(state=>{if(state==='SUBSCRIBED'){setScanChannel(channel);setStatus('Connected. Scan a product barcode.')}})
+    return()=>{setScanChannel(null);void client.removeChannel(channel)}
   },[sessionId,allowed])
   useEffect(()=>{
     if(!scanning||!allowed||!scanChannel)return
@@ -1122,14 +1123,15 @@ export default function App() {
   }
 
   useEffect(()=>{
-    if(!supabase||!session||page!=='Point of Sale'||!scannerSession)return
-    const channel=supabase.channel(`pos-scan-${scannerSession}`)
+    const client=supabase
+    if(!client||!session||page!=='Point of Sale'||!scannerSession)return
+    const channel=client.channel(`pos-scan-${scannerSession}`)
       .on('broadcast',{event:'scan'},({payload})=>{
         const code=String(payload?.code||'').trim()
         if(code){addBarcodeValue(code);setNotice(`Phone scanner added barcode ${code} to this POS.`)}
       })
       .subscribe(status=>setScannerConnected(status==='SUBSCRIBED'))
-    return()=>{setScannerConnected(false);void supabase.removeChannel(channel)}
+    return()=>{setScannerConnected(false);void client.removeChannel(channel)}
   },[session,page,scannerSession,posVariants])
 
   async function connectBluetoothPrinter(){
