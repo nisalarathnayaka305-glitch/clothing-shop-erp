@@ -365,3 +365,9 @@ input:focus,select:focus,textarea:focus{
 /* Sidebar can be fully hidden and restored from the workspace header. */
 .shell.sidebar-hidden>aside{display:none!important}
 .shell.sidebar-hidden>main{margin-left:0!important}
+
+
+/* Company logo display */
+.retail-brand-mark img{width:100%;height:100%;object-fit:contain;padding:4px}
+.company-brand-card .logo-actions{margin-top:12px}
+.invoice-company-logo img{width:100%;height:100%;object-fit:contain;padding:5px}
