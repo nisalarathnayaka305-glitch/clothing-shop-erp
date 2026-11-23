@@ -12,6 +12,19 @@ A single-shop clothing retail ERP built with React, TypeScript, Vite and Supabas
 - Supplier accounts and invoice-level supplier payments
 - Customer credit sales, accounts receivable and payment collection
 
+
+## Standalone Accounting Workspace
+
+A separate accounting web app is built in `accounting/` and is hosted at:
+
+`https://nisalarathnayaka305-glitch.github.io/clothing-shop-erp/accounting/`
+
+It uses the same Supabase project and Admin/Manager login to keep hosting and database costs low, while keeping accounting UI and data in separate `acct_*` tables. The workspace includes the Chart of Accounts, Journal Entries, General Ledger, Trial Balance, Profit & Loss, Balance Sheet and Opening Balances.
+
+Important: ERP transaction synchronisation is a later integration step. Until that is completed and opening balances are entered and reconciled, the accounting statements include only posted accounting journals.
+
+Build both applications with `npm run build:all`.
+
 ## Local development
 
 ```bash
