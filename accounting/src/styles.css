@@ -393,3 +393,11 @@ tbody tr:hover td{background:#fafbff}
   .sidebar-toggle,.icon-button.refresh-button{width:38px;height:38px;flex-basis:38px}
   .breadcrumbs{font-size:10px;gap:6px}
 }
+
+
+.app-shell.sidebar-collapsed .sidebar-bottom button{
+  width:36px;height:36px;display:grid;place-items:center;padding:0;
+  border-radius:10px;background:#f3f4ff;color:#5148ed;font-size:0;
+}
+.app-shell.sidebar-collapsed .sidebar-logout-label{display:none}
+.sidebar-bottom button svg{vertical-align:middle}
