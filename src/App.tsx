@@ -1,7 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { supabase, supabaseConfigured, money, type Product, type ProductVariant } from './lib'
-import AccountingWorkspace from './Accounting'
 
 const demo: Product[] = [
   { id: '1', product_no: 'PRD-00001', sku: 'TSH-001', name: 'Classic Cotton T-Shirt', category: 'T-Shirts', selling_price: 2500, cost_price: 1450, active: true },
@@ -16,7 +15,7 @@ type POSVariant = ProductVariant & { product_no: string; product_name: string; s
 type CartLine = { variant_id: string; product_no: string; name: string; sku: string; size: string; colour: string; unit_price: number; quantity: number; available: number }
 type Invoice = { invoice_no: string; subtotal: number; discount: number; total: number; amount_received: number; change_amount: number; payment_method: string; created_at: string; items: CartLine[] }
 
-const navigation = ['Overview', 'Point of Sale', 'Sales History', 'Returns & Exchanges', 'Products & Stock', 'Purchases', 'Purchase Orders', 'Customers', 'Customer Accounts', 'Loyalty', 'Cash Management', 'Suppliers', 'Supplier Accounts', 'Expenses', 'Reports', 'Employees', 'Attendance', 'Payroll', 'Accounting', 'Settings']
+const navigation = ['Overview', 'Point of Sale', 'Sales History', 'Returns & Exchanges', 'Products & Stock', 'Purchases', 'Purchase Orders', 'Customers', 'Customer Accounts', 'Loyalty', 'Cash Management', 'Suppliers', 'Supplier Accounts', 'Expenses', 'Reports', 'Employees', 'Attendance', 'Payroll', 'Settings']
 const localBusinessDate = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Colombo' }).format(new Date())
 
 export default function App() {
@@ -1011,7 +1010,7 @@ export default function App() {
               {sales.length===0&&<tr><td colSpan={5}>No sales recorded yet.</td></tr>}
             </tbody></table></div>
           </article>
-          <p className="muted">Figures use the latest 500 sales, 500 returns and 1,000 expenses loaded by this app. Estimated profit excludes supplier-payment entries to avoid treating inventory settlement as an operating expense. Confirm accounting treatment with your accountant.</p>
+          <p className="muted">Figures use the latest 500 sales, 500 returns and 1,000 expenses loaded by this app. Estimated profit excludes supplier-payment entries to avoid treating inventory settlement as an operating expense. These figures are operational estimates, not formal financial statements.</p>
         </> : page === 'Reports' ? <>
           <div className="heading"><div><p className="eyebrow">BUSINESS INTELLIGENCE</p><h1>Reports & Analytics</h1><p>Review sales, refunds, estimated profit, payment methods and product performance.</p></div><div className="toolbar"><button onClick={()=>{void loadSales();void loadExpenses();void loadReturns();void loadPOSVariants()}}>Refresh reports</button><button className="primary" onClick={() => {
             const rows: (string | number)[][] = [
@@ -1072,7 +1071,7 @@ export default function App() {
             {reportSales.slice(0,12).map(s=><tr key={s.id}><td>{new Date(s.created_at).toLocaleDateString()}</td><td>{s.invoice_no}</td><td>{(s.sale_items||[]).reduce((n:number,i:any)=>n+Number(i.quantity),0)}</td><td>{s.payment_method}</td><td>{money(Number(s.total))}</td></tr>)}
             {reportSales.length===0&&<tr><td colSpan={5}>No sales in this period.</td></tr>}
           </tbody></table></div></article>
-          <p className="muted">Reports use the latest 500 sales, 500 returns and 1,000 expenses loaded by this app. Profit is estimated from recorded sale-item unit costs and restocked returns; supplier-payment expenses are excluded from operating expenses. Export and full accounting reconciliation are not included in this release.</p>
+          <p className="muted">Reports use the latest 500 sales, 500 returns and 1,000 expenses loaded by this app. Profit is estimated from recorded sale-item unit costs and restocked returns; supplier-payment expenses are excluded from operating expenses. These figures are operational estimates.</p>
         </> : page === 'Employees' ? <>
           <div className="heading"><div><p className="eyebrow">TEAM & ACCESS CONTROL</p><h1>Employee Management</h1><p>Maintain staff details and connect each employee to a Supabase login account.</p></div><button onClick={()=>void loadEmployees()}>Refresh</button></div>
           {currentEmployeeRole !== 'Admin' && currentEmployeeRole !== 'Manager' ? <article>
@@ -1340,7 +1339,7 @@ export default function App() {
           <div className="heading"><div><p className="eyebrow">PROCUREMENT CONTROL</p><h1>Purchase Requests & Approvals</h1><p>Create a request for supplier stock, submit it and approve it before using the existing receiving workflow.</p></div><button onClick={()=>void loadPurchaseRequests()}>Refresh</button></div>
           <article><h3>Create purchase request</h3><form onSubmit={createPurchaseRequest} className="customer-form"><label>Supplier<select required value={purchaseRequestForm.supplier_id} onChange={e=>setPurchaseRequestForm({...purchaseRequestForm,supplier_id:e.target.value})}><option value="">Select supplier</option>{suppliers.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select></label><label>Product / variant<select required value={purchaseRequestForm.variant_id} onChange={e=>setPurchaseRequestForm({...purchaseRequestForm,variant_id:e.target.value})}><option value="">Select variant</option>{posVariants.map(x=><option key={x.id} value={x.id}>{x.product_no} · {x.product_name} · {x.size}/{x.colour}</option>)}</select></label><label>Quantity<input type="number" min="1" required value={purchaseRequestForm.quantity} onChange={e=>setPurchaseRequestForm({...purchaseRequestForm,quantity:e.target.value})}/></label><label>Estimated unit cost (LKR)<input type="number" min="0" step="0.01" required value={purchaseRequestForm.unit_cost} onChange={e=>setPurchaseRequestForm({...purchaseRequestForm,unit_cost:e.target.value})}/></label><label>Notes<input value={purchaseRequestForm.notes} onChange={e=>setPurchaseRequestForm({...purchaseRequestForm,notes:e.target.value})}/></label><button className="primary" disabled={busy}>Submit purchase request</button></form></article>
           <article><h3>Purchase requests</h3><div className="tablewrap"><table><thead><tr><th>REQUEST</th><th>SUPPLIER</th><th>ITEMS</th><th>STATUS</th><th>CREATED</th><th>ACTION</th></tr></thead><tbody>{purchaseRequests.map(x=><tr key={x.id}><td><b>{x.request_no}</b></td><td>{x.suppliers?.name||'—'}</td><td>{(x.purchase_request_items||[]).map((i:any)=>`${i.quantity} × ${i.product_variants?.products?.name||'Product'} ${i.product_variants?.size||''}/${i.product_variants?.colour||''}`).join(', ')}</td><td>{x.status}</td><td>{new Date(x.created_at).toLocaleDateString()}</td><td>{x.status==='Submitted'?<button className="small-action" disabled={busy} onClick={()=>void approvePurchaseRequest(x.id)}>Approve</button>:x.status==='Approved'?'Ready to receive':'—'}</td></tr>)}{!purchaseRequests.length&&<tr><td colSpan={6}>No purchase requests recorded.</td></tr>}</tbody></table></div></article>
-        </> : page === 'Accounting' ? <AccountingWorkspace session={session} role={currentEmployeeRole} /> : page === 'Settings' ? <>
+        </> : page === 'Settings' ? <>
           <div className="heading"><div><p className="eyebrow">SYSTEM ADMINISTRATION</p><h1>Settings & Data Backup</h1><p>Export operational data for secure offline retention.</p></div></div>
           <article><h3>Database data export</h3><p className="muted">Downloads up to 10,000 rows per operational table in a JSON file. This is a data export, not a full Supabase point-in-time backup; it does not include authentication credentials, database schema, storage files or project settings.</p><button className="primary" disabled={busy || !['Admin'].includes(currentEmployeeRole||'')} onClick={()=>void exportDataBackup()}>{busy?'Preparing export…':'Download data backup (JSON)'}</button>{currentEmployeeRole!=='Admin'&&<p className="muted">Only Admin users can export the database data.</p>}</article>
           <article><h3>Inventory tools</h3><p className="muted">Download product, size, colour, barcode and stock information for spreadsheet review.</p><button onClick={exportInventoryCSV}>Export inventory CSV</button></article>
