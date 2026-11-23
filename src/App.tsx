@@ -1,9 +1,10 @@
 import { useEffect, useState, type ChangeEvent, type FormEvent } from 'react'
+import { QRCodeSVG } from 'qrcode.react'
 import { Html5Qrcode } from 'html5-qrcode'
 import JsBarcode from 'jsbarcode'
 import type { Session } from '@supabase/supabase-js'
 import { supabase, supabaseConfigured, money, type Product, type ProductVariant } from './lib'
-import { Activity, Banknote, BarChart3, Bluetooth, BookOpen, CalendarCheck, Camera, CircleHelp, ClipboardList, CreditCard, Gift, LayoutDashboard, Package, PanelLeftClose, PanelLeftOpen, Printer, Receipt, RefreshCw, Repeat, Settings, ShoppingBag, ShoppingCart, Store, Truck, UserCog, Users, Wallet } from 'lucide-react'
+import { Activity, Banknote, BarChart3, Bluetooth, BookOpen, CalendarCheck, Camera, CircleHelp, ClipboardList, CreditCard, Gift, Grid3X3, LayoutDashboard, Package, PanelLeftClose, PanelLeftOpen, Printer, Receipt, RefreshCw, Repeat, Settings, ShoppingBag, ShoppingCart, Store, Truck, UserCog, Users, Wallet } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 
 const demo: Product[] = [
@@ -19,9 +20,9 @@ type POSVariant = ProductVariant & { product_no: string; product_name: string; s
 type CartLine = { variant_id: string; product_no: string; name: string; sku: string; size: string; colour: string; unit_price: number; quantity: number; available: number }
 type Invoice = { invoice_no: string; subtotal: number; discount: number; total: number; amount_received: number; change_amount: number; payment_method: string; created_at: string; items: CartLine[] }
 
-const navigation = ['Overview', 'Point of Sale', 'Sales History', 'Returns & Exchanges', 'Products & Stock', 'Purchases', 'Purchase Orders', 'Customers', 'Customer Accounts', 'Loyalty', 'Cash Management', 'Suppliers', 'Supplier Accounts', 'Expenses', 'Reports', 'Employees', 'Attendance', 'Payroll', 'Settings']
+const navigation = ['Apps', 'Overview', 'Point of Sale', 'Sales History', 'Returns & Exchanges', 'Products & Stock', 'Purchases', 'Purchase Orders', 'Customers', 'Customer Accounts', 'Loyalty', 'Cash Management', 'Suppliers', 'Supplier Accounts', 'Expenses', 'Reports', 'Employees', 'Attendance', 'Payroll', 'Settings']
 const moduleIcons: Record<string, LucideIcon> = {
-  'Overview': LayoutDashboard, 'Point of Sale': ShoppingCart, 'Sales History': Receipt,
+  'Apps': Grid3X3, 'Overview': LayoutDashboard, 'Point of Sale': ShoppingCart, 'Sales History': Receipt,
   'Returns & Exchanges': Repeat, 'Products & Stock': Package, 'Purchases': ShoppingBag,
   'Purchase Orders': ClipboardList, 'Customers': Users, 'Customer Accounts': CreditCard,
   'Loyalty': Gift, 'Cash Management': Wallet, 'Suppliers': Truck, 'Supplier Accounts': CreditCard,
@@ -48,10 +49,42 @@ const localBusinessMonthRange = () => {
 }
 const localBusinessYearStart = () => `${localBusinessDate().slice(0, 4)}-01-01`
 
+function PhoneBarcodeScanner({sessionId,allowed}:{sessionId:string;allowed:boolean}) {
+  const [scanning,setScanning]=useState(true)
+  const [status,setStatus]=useState('Connecting to the laptop POS…')
+  const [lastCode,setLastCode]=useState('')
+  useEffect(()=>{
+    if(!supabase||!allowed){setStatus('Please sign in with an Admin, Manager or Cashier account.');return}
+    const channel=supabase.channel(`pos-scan-${sessionId}`).subscribe(state=>{if(state==='SUBSCRIBED')setStatus('Connected. Scan a product barcode.')})
+    return()=>{void supabase.removeChannel(channel)}
+  },[sessionId,allowed])
+  useEffect(()=>{
+    if(!scanning||!allowed)return
+    const reader=new Html5Qrcode('phone-pos-camera')
+    let active=true
+    void reader.start({facingMode:'environment'},{fps:12,qrbox:{width:260,height:170},aspectRatio:1.6},async(code)=>{
+      if(!active)return
+      active=false
+      try{await reader.stop()}catch{}
+      const value=String(code||'').trim()
+      setLastCode(value)
+      setStatus('Sending barcode to the laptop…')
+      const channel=supabase!.channel(`pos-scan-${sessionId}`)
+      await channel.send({type:'broadcast',event:'scan',payload:{code:value,scanned_at:new Date().toISOString()}})
+      await supabase!.removeChannel(channel)
+      setStatus('Added to the laptop POS. Scan the next item.')
+      setScanning(false)
+    },()=>{}).catch(e=>{setStatus(e instanceof Error?e.message:'Camera could not start. Allow camera access.');setScanning(false)})
+    return()=>{active=false;if(reader.isScanning)void reader.stop().catch(()=>{})}
+  },[scanning,sessionId,allowed])
+  return <div className="phone-scanner-screen"><article className="phone-scanner-card"><div className="phone-scanner-brand"><Store size={26}/><b>Clothing ERP · Mobile Scanner</b></div><h1>Scan products</h1><p>{status}</p>{!allowed?<p>Access is limited to Admin, Manager and Cashier roles.</p>:<><div id="phone-pos-camera"/>{lastCode&&<p className="phone-scanner-last">Last scanned: <b>{lastCode}</b></p>}<button className="primary full" onClick={()=>{setLastCode('');setScanning(true)}} disabled={scanning}>Scan next product</button></>}<button className="text-button" onClick={()=>{window.location.href=window.location.pathname}}>Exit scanner</button></article></div>
+}
+
 export default function App() {
+  const scannerSessionId = new URLSearchParams(window.location.search).get('scanner')
   const [products, setProducts] = useState<Product[]>(demo)
   const [variants, setVariants] = useState<ProductVariant[]>(demoVariants)
-  const [page, setPage] = useState('Overview')
+  const [page, setPage] = useState('Apps')
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => { try { return window.localStorage.getItem('clothing-erp-sidebar-hidden') === 'true' } catch { return false } })
   useEffect(() => { try { window.localStorage.setItem('clothing-erp-sidebar-hidden', String(sidebarCollapsed)) } catch {} }, [sidebarCollapsed])
   const [query, setQuery] = useState('')
@@ -73,6 +106,8 @@ export default function App() {
   const [bluetoothPrinter,setBluetoothPrinter]=useState<any>(null)
   const [printerCharacteristic,setPrinterCharacteristic]=useState<any>(null)
   const [printerStatus,setPrinterStatus]=useState('Not connected')
+  const [scannerSession,setScannerSession]=useState('')
+  const [scannerConnected,setScannerConnected]=useState(false)
   const [cart, setCart] = useState<CartLine[]>([])
   const [discount, setDiscount] = useState('0')
   const [paymentMethod, setPaymentMethod] = useState('Cash')
@@ -155,6 +190,8 @@ export default function App() {
     return () => { mounted = false; listener.subscription.unsubscribe() }
   }, [])
 
+  useEffect(() => { document.documentElement.dataset.theme = companySettings.theme_mode || 'light' }, [companySettings.theme_mode])
+
   useEffect(() => {
     if (supabase && session) void loadCompanySettings()
     else setCompanySettings(defaultCompanySettings)
@@ -216,6 +253,7 @@ export default function App() {
       currency_code: 'LKR',
       receipt_footer: companySettings.receipt_footer.trim(),
       invoice_note: companySettings.invoice_note.trim(),
+      theme_mode: companySettings.theme_mode || 'light',
       updated_by: session.user.id,
       updated_at: new Date().toISOString()
     }
@@ -976,7 +1014,7 @@ export default function App() {
     if (!supabase) return
     const { error } = await supabase.auth.signOut()
     if (error) setNotice(error.message)
-    else { setProducts(demo); setVariants(demoVariants); setPage('Overview'); setActiveProduct(null) }
+    else { setProducts(demo); setVariants(demoVariants); setPage('Apps'); setActiveProduct(null) }
   }
 
   async function saveProduct(event: FormEvent) {
@@ -1075,13 +1113,24 @@ export default function App() {
         setPosVariants(current=>current.map(v=>v.id===variant.id?{...v,barcode:code}:v))
       }
       const svg=document.createElementNS('http://www.w3.org/2000/svg','svg')
-      try{JsBarcode(svg,code,{format:'CODE128',displayValue:true,fontSize:10,height:42,margin:2,lineColor:'#111',background:'#fff'})}catch{setNotice('Barcode could not be generated for '+code);return}
+      try{JsBarcode(svg,code,{format:'CODE128',displayValue:false,width:2.4,height:68,margin:5,lineColor:'#111',background:'#fff'})}catch{setNotice('Barcode could not be generated for '+code);return}
       prepared.push({variant,code,svg:svg.outerHTML})
     }
     const labels=prepared.map(({variant,code,svg})=>`<div class="label"><strong>${escapeHtml(product.name)}</strong><span>${escapeHtml(product.product_no)} · SKU ${escapeHtml(product.sku)}</span><span>${escapeHtml(variant.size)} / ${escapeHtml(variant.colour)}</span>${svg}<small>${escapeHtml(code)}</small></div>`).join('')
     const win=window.open('', '_blank', 'width=900,height=650'); if (!win) { setNotice('Allow pop-ups to print barcode labels.'); return }
-    win.document.write(`<!doctype html><html><head><title>Product Barcode Labels</title><style>*{box-sizing:border-box}body{font-family:Arial;padding:8mm}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:5mm}.label{border:1px dashed #777;padding:3mm;min-height:35mm;display:flex;align-items:center;text-align:center;flex-direction:column;gap:2mm;break-inside:avoid}.label strong{font-size:10pt}.label span,.label small{font-size:7pt}.label svg{max-width:100%;height:13mm}.label svg text{font-family:Arial;font-size:9px}@media print{@page{size:A4;margin:6mm}.label{border:1px solid #aaa}}</style></head><body><div class="grid">${labels}</div><script>window.onload=()=>window.print()</script></body></html>`);win.document.close()
+    win.document.write(`<!doctype html><html><head><title>Product Barcode Labels</title><style>*{box-sizing:border-box}body{font-family:Arial;padding:8mm}.grid{display:grid;grid-template-columns:repeat(2,1fr);gap:5mm}.label{border:1px dashed #777;padding:4mm;min-height:48mm;display:flex;align-items:center;text-align:center;flex-direction:column;gap:2mm;break-inside:avoid} .label strong{font-size:13pt}.label span,.label small{font-size:9pt}.label svg{width:100%;max-width:100%;height:20mm;overflow:visible}@media print{@page{size:A4;margin:6mm}.label{border:1px solid #aaa}}</style></head><body><div class="grid">${labels}</div><script>window.onload=()=>window.print()</script></body></html>`);win.document.close()
   }
+
+  useEffect(()=>{
+    if(!supabase||!session||page!=='Point of Sale'||!scannerSession)return
+    const channel=supabase.channel(`pos-scan-${scannerSession}`)
+      .on('broadcast',{event:'scan'},({payload})=>{
+        const code=String(payload?.code||'').trim()
+        if(code){addBarcodeValue(code);setNotice(`Phone scanner added barcode ${code} to this POS.`)}
+      })
+      .subscribe(status=>setScannerConnected(status==='SUBSCRIBED'))
+    return()=>{setScannerConnected(false);void supabase.removeChannel(channel)}
+  },[session,page,scannerSession,posVariants])
 
   async function connectBluetoothPrinter(){
     try{
@@ -1163,6 +1212,7 @@ export default function App() {
   const reportNetProfit = reportGrossProfit-reportOperatingExpenses
   const paymentBreakdown = ['Cash','Card','Bank Transfer','Credit'].map(method=>({method,count:reportSales.filter(s=>s.payment_method===method).length,total:reportSales.filter(s=>s.payment_method===method).reduce((sum,s)=>sum+Number(s.total),0)}))
   const topProducts = Object.values(reportSales.flatMap(s=>s.sale_items||[]).reduce((acc:any,line:any)=>{const key=line.product_no||line.product_name;acc[key]??={name:line.product_name,productNo:line.product_no,quantity:0,revenue:0};acc[key].quantity+=Number(line.quantity);acc[key].revenue+=Number(line.line_total);return acc},{})).sort((x:any,y:any)=>y.quantity-x.quantity).slice(0,8)
+  const allowedPages = supabaseConfigured && session ? (currentEmployeeRole === 'Admin' ? navigation.filter(item=>item!=='Apps') : currentEmployeeRole === 'Manager' ? navigation.filter(item=>!['Settings','Apps'].includes(item)) : currentEmployeeRole === 'Cashier' ? ['Overview','Point of Sale','Sales History','Customers','Customer Accounts','Attendance'] : currentEmployeeRole === 'Staff' ? ['Overview','Products & Stock','Attendance'] : ['Overview','Employees']) : navigation.filter(item=>item!=='Apps')
   const expenseBreakdown = Object.values(reportExpenses.reduce((acc:any,e:any)=>{acc[e.category]??={category:e.category,total:0,count:0};acc[e.category].total+=Number(e.amount);acc[e.category].count++;return acc},{})).sort((x:any,y:any)=>y.total-x.total)
   const lowStockItems = posVariants.filter(v=>v.quantity<=v.reorder_level).sort((x,y)=>x.quantity-y.quantity).slice(0,8)
   const lowStockCount = posVariants.filter(v => v.quantity <= v.reorder_level).length
@@ -1176,12 +1226,24 @@ export default function App() {
     <button className="primary full" disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</button><p className="muted hint">User accounts are managed securely in Supabase.</p>
   </form></div>
 
+  if (scannerSessionId && session) return <PhoneBarcodeScanner sessionId={scannerSessionId} allowed={['Admin','Manager','Cashier'].includes(currentEmployeeRole||'')} />
   return <div className={sidebarCollapsed ? 'shell sidebar-collapsed' : 'shell'}>
-    <aside><div className="retail-brand"><div className="retail-brand-mark">{companySettings.logo_data_url ? <img src={companySettings.logo_data_url} alt="Company logo"/> : <Store size={19}/>}</div><div className="brand-copy"><h2>{companySettings.company_name || 'Clothing ERP'}</h2><small>{companySettings.tagline || 'RETAIL MANAGEMENT'}</small></div></div>{(supabaseConfigured && session ? (currentEmployeeRole === 'Admin' ? navigation : currentEmployeeRole === 'Manager' ? navigation.filter(item=>item!=='Settings') : currentEmployeeRole === 'Cashier' ? ['Overview','Point of Sale','Sales History','Customers','Customer Accounts','Attendance'] : currentEmployeeRole === 'Staff' ? ['Overview','Products & Stock','Attendance'] : ['Overview','Employees']) : navigation).map(item => { const Icon = moduleIcons[item] || CircleHelp; return <button key={item} className={page === item ? 'active' : ''} onClick={() => setPage(item)} title={sidebarCollapsed ? item : undefined}><Icon size={17} strokeWidth={2}/><span className="nav-label">{item}</span></button> })}{supabaseConfigured && session && <a className="accounting-nav-link" href="/clothing-shop-erp/leave/" title={sidebarCollapsed?'Attendance & Leave':undefined}><CalendarCheck size={18} strokeWidth={2}/> <span className="nav-label">Attendance & Leave</span><span className="accounting-nav-arrow">↗</span></a>}{supabaseConfigured && session && ['Admin','Manager'].includes(currentEmployeeRole || '') && <a className="accounting-nav-link" href="/clothing-shop-erp/accounting/" title={sidebarCollapsed?'Accounting':undefined}><BookOpen size={18} strokeWidth={2}/> <span className="nav-label">Accounting</span><span className="accounting-nav-arrow">↗</span></a>}</aside>
+    <aside><div className="retail-brand"><div className="retail-brand-mark">{companySettings.logo_data_url ? <img src={companySettings.logo_data_url} alt="Company logo"/> : <Store size={19}/>}</div><div className="brand-copy"><h2>{companySettings.company_name || 'Clothing ERP'}</h2><small>{companySettings.tagline || 'RETAIL MANAGEMENT'}</small></div></div>{(['Apps',...allowedPages].map(item => { const Icon = moduleIcons[item] || CircleHelp; return <button key={item} className={page === item ? 'active' : ''} onClick={() => setPage(item)} title={sidebarCollapsed ? item : undefined}><Icon size={17} strokeWidth={2}/><span className="nav-label">{item}</span></button> })}{supabaseConfigured && session && <a className="accounting-nav-link" href="/clothing-shop-erp/leave/" title={sidebarCollapsed?'Attendance & Leave':undefined}><CalendarCheck size={18} strokeWidth={2}/> <span className="nav-label">Attendance & Leave</span><span className="accounting-nav-arrow">↗</span></a>}{supabaseConfigured && session && ['Admin','Manager'].includes(currentEmployeeRole || '') && <a className="accounting-nav-link" href="/clothing-shop-erp/accounting/" title={sidebarCollapsed?'Accounting':undefined}><BookOpen size={18} strokeWidth={2}/> <span className="nav-label">Accounting</span><span className="accounting-nav-arrow">↗</span></a>}</aside>
     <main><header><div className="header-left"><button className="sidebar-toggle" onClick={()=>setSidebarCollapsed(value=>!value)} aria-label={sidebarCollapsed ? 'Show sidebar' : 'Hide sidebar'} title={sidebarCollapsed ? 'Show sidebar' : 'Hide sidebar'}>{sidebarCollapsed ? <PanelLeftOpen size={18}/> : <PanelLeftClose size={18}/>}</button><b>Workspace / {page}</b></div><div className="header-actions"><span className={supabaseConfigured ? 'ok' : 'demo'}>{supabaseConfigured ? 'Supabase connected' : 'Demo mode'}</span><button className="icon-button refresh-button" onClick={()=>window.location.reload()} aria-label="Refresh workspace" title="Refresh workspace"><RefreshCw size={16}/></button>{session && <button className="text-button" onClick={() => void signOut()}>Sign out</button>}</div></header>
       <section>
         {notice && <p className="notice">{notice}<button className="dismiss" onClick={() => setNotice('')}>×</button></p>}
-                {page === 'Overview' ? <>
+                {page === 'Apps' ? <>
+          <div className="app-launcher-heading"><p className="eyebrow">YOUR BUSINESS WORKSPACE</p><h1>Applications</h1><p>Open the tools you need to run your business.</p></div>
+          <div className="app-launcher-grid">
+            {[
+              {title:'Sales & Checkout',items:[['Point of Sale',ShoppingCart],['Sales History',Receipt],['Returns & Exchanges',Repeat],['Customers',Users],['Customer Accounts',CreditCard],['Loyalty',Gift]]},
+              {title:'Inventory & Procurement',items:[['Products & Stock',Package],['Purchases',ShoppingBag],['Purchase Orders',ClipboardList],['Suppliers',Truck],['Supplier Accounts',CreditCard]]},
+              {title:'Finance & Analytics',items:[['Cash Management',Wallet],['Expenses',Activity],['Reports',BarChart3]]},
+              {title:'People & Operations',items:[['Employees',UserCog],['Attendance',CalendarCheck],['Payroll',Banknote]]},
+            ].map(group=>{const allowed=group.items.filter(([name])=>allowedPages.includes(String(name)));return allowed.length?<article className="app-group-card" key={group.title}><h2>{group.title}</h2><div className="app-tile-grid">{allowed.map(([name,Icon],index)=>{const TileIcon=Icon as LucideIcon;return <button className={`app-tile app-tile-${index%5}`} key={String(name)} onClick={()=>setPage(String(name))}><span className="app-tile-icon"><TileIcon size={25}/></span><span>{String(name)}</span></button>})}</div></article>:null})}
+            <article className="app-group-card"><h2>Business Management</h2><div className="app-tile-grid">{supabaseConfigured&&session&&<a className="app-tile app-tile-0" href="/clothing-shop-erp/leave/"><span className="app-tile-icon"><CalendarCheck size={25}/></span><span>Attendance & Leave</span></a>}{supabaseConfigured&&session&&['Admin','Manager'].includes(currentEmployeeRole||'')&&<a className="app-tile app-tile-2" href="/clothing-shop-erp/accounting/"><span className="app-tile-icon"><BookOpen size={25}/></span><span>Accounting & P&amp;L</span></a>}{supabaseConfigured&&session&&<a className="app-tile app-tile-3" href="/clothing-shop-erp/accounting/"><span className="app-tile-icon"><BarChart3 size={25}/></span><span>Financial Reports</span></a>}</div></article>
+          </div>
+        </> : page === 'Overview' ? <>
           <div className="heading"><div><p className="eyebrow">LIVE SHOP OVERVIEW</p><h1>{businessGreeting()} 👋</h1><p>Business performance based on the latest loaded transactions.</p></div></div>
           {products.length===0 && <article className="first-run-card"><div><p className="eyebrow">READY FOR YOUR FIRST DAY</p><h3>Complete your shop setup</h3><p className="muted">Your test records have been cleared. Add your company details, real products and opening stock to start using the POS.</p><div className="first-run-steps"><span><b>1</b> Company profile</span><span><b>2</b> Product catalogue</span><span><b>3</b> Opening stock</span></div></div><div className="first-run-actions"><button onClick={()=>setPage('Settings')}>Company settings</button><button className="primary" onClick={()=>setPage('Products & Stock')}>Add first product</button></div></article>}
           <div className="stats">
@@ -1483,7 +1545,8 @@ export default function App() {
               {filtered.length === 0 && <tr><td colSpan={8}>No products found.</td></tr>}</tbody></table></div>
           </article>
         </> : page === 'Point of Sale' ? <>
-          <div className="heading"><div><p className="eyebrow">CHECKOUT</p><h1>Point of Sale</h1><p>Scan a barcode or select a size and colour variant.</p></div><div className="pos-device-actions"><span className={supabaseConfigured ? 'ok' : 'demo'}>{supabaseConfigured ? 'Live inventory' : 'Demo inventory'}</span>{bluetoothPrinter?<button onClick={()=>{bluetoothPrinter.gatt?.disconnect();setBluetoothPrinter(null);setPrinterCharacteristic(null);setPrinterStatus('Printer disconnected')}}><Bluetooth size={15}/> Disconnect printer</button>:<button onClick={()=>void connectBluetoothPrinter()}><Bluetooth size={15}/> Connect Bluetooth printer</button>}<small>{printerStatus}</small></div></div>
+          <div className="heading"><div><p className="eyebrow">CHECKOUT</p><h1>Point of Sale</h1><p>Scan a barcode or select a size and colour variant.</p></div><div className="pos-device-actions"><span className={supabaseConfigured ? 'ok' : 'demo'}>{supabaseConfigured ? 'Live inventory' : 'Demo inventory'}</span><button onClick={()=>setScannerSession(current=>current?'':crypto.randomUUID())}>{scannerSession?'Close phone pairing':'Pair phone scanner'}</button>{bluetoothPrinter?<button onClick={()=>{bluetoothPrinter.gatt?.disconnect();setBluetoothPrinter(null);setPrinterCharacteristic(null);setPrinterStatus('Printer disconnected')}}><Bluetooth size={15}/> Disconnect printer</button>:<button onClick={()=>void connectBluetoothPrinter()}><Bluetooth size={15}/> Connect Bluetooth printer</button>}<small>{printerStatus} · {scannerSession?(scannerConnected?'Phone scanner connected':'Waiting for phone scan'):''}</small></div></div>
+          {scannerSession&&<article className="phone-pair-card"><div><h3>Scan with your phone</h3><p className="muted">Connect your phone to this live POS. Every scanned product will appear in this laptop cart instantly.</p><span className={scannerConnected?'ok':'demo'}>{scannerConnected?'Phone connected':'Waiting for phone'}</span></div><QRCodeSVG value={`${window.location.origin}${window.location.pathname}?scanner=${scannerSession}`} size={160} level="H" includeMargin/><button className="text-button" onClick={()=>setScannerSession('')}>Close pairing</button></article>}
           <div className="pos-layout">
             <div className="pos-products">
               <form className="barcode-form" onSubmit={addBarcode}><input autoFocus aria-label="Barcode, SKU or product number" placeholder="Scan barcode / enter SKU / Product No." value={barcodeInput} onChange={e => setBarcodeInput(e.target.value)} /><button className="primary">Add</button><button type="button" className="camera-scan-button" onClick={()=>setCameraScanning(v=>!v)}><Camera size={16}/>{cameraScanning?'Stop camera':'Scan with phone'}</button></form>{cameraScanning&&<div className="pos-camera-panel"><div id="pos-camera-reader"/><p className="muted">Point your phone camera at a product barcode.</p></div>}
@@ -1549,6 +1612,7 @@ export default function App() {
             </article>
             <article>
               <div className="settings-section-heading"><div><h3>Business information</h3><p className="muted">These details are used in the workspace and customer receipts.</p></div><span className="settings-step">01</span></div>
+              <article className="appearance-settings-card"><div><h3>Workspace appearance</h3><p className="muted">Choose the appearance for ERP, Attendance and Accounting. Only an Admin can change this setting.</p></div><label className="theme-select-label">Theme<select value={companySettings.theme_mode||'light'} onChange={e=>setCompanySettings((v:any)=>({...v,theme_mode:e.target.value}))}><option value="light">Light mode (White sidebar)</option><option value="dark">Dark mode</option></select></label></article>
               <div className="company-settings-grid">
                 <label>Company / shop name<input required maxLength={120} value={companySettings.company_name} onChange={e=>setCompanySettings((v:any)=>({...v,company_name:e.target.value}))} placeholder="Your company name"/></label>
                 <label>Tagline<input maxLength={120} value={companySettings.tagline} onChange={e=>setCompanySettings((v:any)=>({...v,tagline:e.target.value}))} placeholder="Clothing & Retail"/></label>
