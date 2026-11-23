@@ -70,9 +70,10 @@ function downloadCsv(filename: string, rows: (string | number)[][]) {
 function App() {
   const [user, setUser] = useState<User | null>(null)
   const [role, setRole] = useState<string | null>(null)
-  const [companySettings, setCompanySettings] = useState({ company_name: 'Clothing Shop', tagline: 'ACCOUNTING', logo_data_url: '' })
+  const [companySettings, setCompanySettings] = useState({ company_name: 'Clothing Shop', tagline: 'ACCOUNTING' })
   const [tab, setTab] = useState<Tab>('overview')
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => { try { return window.localStorage.getItem('clothing-erp-accounting-sidebar-hidden') === 'true' } catch { return false } })
+  useEffect(() => { try { window.localStorage.setItem('clothing-erp-accounting-sidebar-hidden', String(sidebarCollapsed)) } catch {} }, [sidebarCollapsed])
   const [accounts, setAccounts] = useState<Account[]>([])
   const [entries, setEntries] = useState<Entry[]>([])
   const [periods, setPeriods] = useState<Period[]>([])
@@ -119,7 +120,7 @@ function App() {
       supabase.from('products').select('id,product_no,sku,name,category,cost_price,active').order('product_no'),
       supabase.from('product_variants').select('id,product_id,size,colour'),
       supabase.from('stock_balances').select('variant_id,quantity,reorder_level'),
-      supabase.from('company_settings').select('company_name,tagline,logo_data_url').eq('id', true).maybeSingle(),
+      supabase.from('company_settings').select('company_name,tagline').eq('id', true).maybeSingle(),
     ])
     if (accountResult.error) setError(accountResult.error.message)
     else setAccounts((accountResult.data || []) as Account[])
@@ -346,7 +347,7 @@ function App() {
   if (!['Admin','Manager'].includes(role || '')) return <main className="login-shell"><section className="login-card"><h1>Access restricted</h1><p>{error || 'Admin or Manager access is required.'}</p><button className="secondary-button" onClick={handleSignOut}>Sign out</button></section></main>
 
   return (
-    <div className={sidebarCollapsed ? "app-shell sidebar-collapsed" : "app-shell"}>
+    <div className={sidebarCollapsed ? "app-shell sidebar-hidden" : "app-shell"}>
       <aside className="sidebar">
         <div className="brand"><div className="brand-mark"><Store size={18}/></div><div className="brand-copy"><strong>{companySettings.company_name || 'Clothing Shop'}</strong><small>{companySettings.tagline || 'ACCOUNTING'}</small></div></div>
         {['WORKSPACE','REPORTS','ACCOUNTING'].map(group=><div className="nav-group" key={group}><p>{group}</p>{nav.filter(item=>item.group===group).map(item=>{const Icon=accountingIcons[item.id];return <button key={item.id} className={tab===item.id?'nav-item active':'nav-item'} onClick={()=>setTab(item.id)} title={sidebarCollapsed ? item.label : undefined}><Icon className="nav-icon" size={17} strokeWidth={2}/><span className="nav-label">{item.label}</span></button>})}</div>)}
@@ -379,7 +380,7 @@ function App() {
               <StatementRow label="Cost of Goods Sold" value={-pnl.cogs} negative/><StatementTotal label="Gross Profit" value={pnl.grossProfit}/>
               <StatementRow label="Operating Expenses" value={-pnl.operatingExpenses} negative/><StatementRow label="Other Income" value={pnl.otherIncome}/><StatementRow label="Other Expenses" value={-pnl.otherExpenses} negative/>
               <StatementTotal label="Net Profit / (Loss)" value={pnl.netProfit} strong/>
-              <p className="statement-note">Only posted journal entries dated within the selected period are included. ERP transactions are not automatically synced yet.</p>
+              <p className="statement-note">Only posted journal entries dated within the selected period are included. New supported ERP transactions are automatically posted; historical transactions are not backfilled.</p>
             </div>
             <AccountBreakdown title="Revenue and income accounts" rows={pnl.values.filter(row=>['Revenue','Contra Revenue','Other Income'].includes(row.account.account_type))}/>
             <AccountBreakdown title="Cost and expense accounts" rows={pnl.values.filter(row=>['Cost of Sales','Expense','Other Expense'].includes(row.account.account_type))}/>
