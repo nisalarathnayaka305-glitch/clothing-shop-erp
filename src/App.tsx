@@ -1,7 +1,9 @@
 import { useEffect, useState, type ChangeEvent, type FormEvent } from 'react'
+import { Html5Qrcode } from 'html5-qrcode'
+import JsBarcode from 'jsbarcode'
 import type { Session } from '@supabase/supabase-js'
 import { supabase, supabaseConfigured, money, type Product, type ProductVariant } from './lib'
-import { Activity, Banknote, BarChart3, BookOpen, CalendarCheck, CircleHelp, ClipboardList, CreditCard, Gift, LayoutDashboard, Package, PanelLeftClose, PanelLeftOpen, Receipt, RefreshCw, Repeat, Settings, ShoppingBag, ShoppingCart, Store, Truck, UserCog, Users, Wallet } from 'lucide-react'
+import { Activity, Banknote, BarChart3, Bluetooth, BookOpen, CalendarCheck, Camera, CircleHelp, ClipboardList, CreditCard, Gift, LayoutDashboard, Package, PanelLeftClose, PanelLeftOpen, Printer, Receipt, RefreshCw, Repeat, Settings, ShoppingBag, ShoppingCart, Store, Truck, UserCog, Users, Wallet } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 
 const demo: Product[] = [
@@ -67,6 +69,10 @@ export default function App() {
   const [posVariants, setPosVariants] = useState<POSVariant[]>(demoVariants.map(v => { const p = demo.find(item => item.id === v.product_id)!; return { ...v, product_no: p.product_no, product_name: p.name, sku: p.sku, selling_price: p.selling_price } }))
   const [posQuery, setPosQuery] = useState('')
   const [barcodeInput, setBarcodeInput] = useState('')
+  const [cameraScanning,setCameraScanning]=useState(false)
+  const [bluetoothPrinter,setBluetoothPrinter]=useState<any>(null)
+  const [printerCharacteristic,setPrinterCharacteristic]=useState<any>(null)
+  const [printerStatus,setPrinterStatus]=useState('Not connected')
   const [cart, setCart] = useState<CartLine[]>([])
   const [discount, setDiscount] = useState('0')
   const [paymentMethod, setPaymentMethod] = useState('Cash')
@@ -713,15 +719,34 @@ export default function App() {
     setNotice('')
   }
 
-  function addBarcode(event: FormEvent) {
-    event.preventDefault()
-    const code = barcodeInput.trim().toLowerCase()
+  function addBarcodeValue(rawCode:string) {
+    const code = rawCode.trim().toLowerCase()
     const matches = posVariants.filter(v => (v.barcode || '').toLowerCase() === code || v.sku.toLowerCase() === code || v.product_no.toLowerCase() === code)
     if (matches.length === 0) { setNotice('No matching variant found. Check the barcode or product number.'); return }
     if (matches.length > 1) { setNotice('This code matches multiple sizes/colours. Select the correct variant from the product list.'); return }
     addToCart(matches[0])
     setBarcodeInput('')
   }
+  function addBarcode(event: FormEvent) { event.preventDefault(); addBarcodeValue(barcodeInput) }
+
+  useEffect(()=>{
+    if(page!=='Point of Sale'||!cameraScanning)return
+    const scanner=new Html5Qrcode('pos-camera-reader')
+    let active=true
+    const start=async()=>{
+      try {
+        await scanner.start({facingMode:'environment'},{fps:12,qrbox:{width:250,height:150},aspectRatio:1.7},async(decoded)=>{
+          if(!active)return
+          active=false
+          try{await scanner.stop()}catch{}
+          setCameraScanning(false)
+          addBarcodeValue(decoded)
+        },()=>{})
+      } catch(e) { setNotice(e instanceof Error?e.message:'Could not open the phone camera. Check camera permission and HTTPS.');setCameraScanning(false) }
+    }
+    void start()
+    return()=>{active=false;if(scanner.isScanning)void scanner.stop().catch(()=>{})}
+  },[page,cameraScanning,posVariants])
 
   function updateCartQuantity(variantId: string, quantity: number) {
     if (quantity <= 0) { setCart(current => current.filter(line => line.variant_id !== variantId)); return }
@@ -1034,11 +1059,57 @@ export default function App() {
     const url=URL.createObjectURL(new Blob(['\\uFEFF'+csv],{type:'text/csv;charset=utf-8;'})); const a=document.createElement('a'); a.href=url; a.download='clothing-erp-inventory.csv'; a.click(); URL.revokeObjectURL(url)
   }
 
-  function printBarcodeLabels(product: Product, productVariants: ProductVariant[]) {
+  async function printBarcodeLabels(product: Product, productVariants: ProductVariant[]) {
     const escapeHtml = (value: unknown) => String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char] || char))
-    const labels = productVariants.map(v => `<div class="label"><strong>${escapeHtml(product.name)}</strong><span>${escapeHtml(product.product_no)} · ${escapeHtml(v.size)} / ${escapeHtml(v.colour)}</span><b>${escapeHtml(v.barcode || 'BARCODE NOT SET')}</b><small>${v.barcode ? 'Scan code / SKU' : 'Add a barcode before scanning'}</small></div>`).join('')
+    const prepared=[]
+    for(let i=0;i<productVariants.length;i++){
+      const variant=productVariants[i]
+      let code=variant.barcode||''
+      if(!code){
+        code=(`20${product.product_no.replace(/\D/g,'').padStart(5,'0')}${String(i+1).padStart(5,'0')}`).slice(0,12)
+        if(supabase&&session){
+          const {error}=await supabase.from('product_variants').update({barcode:code}).eq('id',variant.id)
+          if(error){setNotice('Could not save generated barcode: '+error.message);return}
+        }
+        setVariants(current=>current.map(v=>v.id===variant.id?{...v,barcode:code}:v))
+        setPosVariants(current=>current.map(v=>v.id===variant.id?{...v,barcode:code}:v))
+      }
+      const svg=document.createElementNS('http://www.w3.org/2000/svg','svg')
+      try{JsBarcode(svg,code,{format:'CODE128',displayValue:true,fontSize:10,height:42,margin:2,lineColor:'#111',background:'#fff'})}catch{setNotice('Barcode could not be generated for '+code);return}
+      prepared.push({variant,code,svg:svg.outerHTML})
+    }
+    const labels=prepared.map(({variant,code,svg})=>`<div class="label"><strong>${escapeHtml(product.name)}</strong><span>${escapeHtml(product.product_no)} · SKU ${escapeHtml(product.sku)}</span><span>${escapeHtml(variant.size)} / ${escapeHtml(variant.colour)}</span>${svg}<small>${escapeHtml(code)}</small></div>`).join('')
     const win=window.open('', '_blank', 'width=900,height=650'); if (!win) { setNotice('Allow pop-ups to print barcode labels.'); return }
-    win.document.write(`<!doctype html><html><head><title>Product Labels</title><style>body{font-family:Arial;padding:12px}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.label{border:1px dashed #555;padding:12px;min-height:85px;display:flex;flex-direction:column;gap:5px;break-inside:avoid}.label strong{font-size:13px}.label span,.label small{font-size:10px}.label b{font-family:monospace;font-size:18px;letter-spacing:2px}@media print{@page{margin:6mm}.label{border:1px solid #aaa}}</style></head><body><div class="grid">${labels}</div><script>window.onload=()=>window.print()</script></body></html>`); win.document.close()
+    win.document.write(`<!doctype html><html><head><title>Product Barcode Labels</title><style>*{box-sizing:border-box}body{font-family:Arial;padding:8mm}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:5mm}.label{border:1px dashed #777;padding:3mm;min-height:35mm;display:flex;align-items:center;text-align:center;flex-direction:column;gap:2mm;break-inside:avoid}.label strong{font-size:10pt}.label span,.label small{font-size:7pt}.label svg{max-width:100%;height:13mm}.label svg text{font-family:Arial;font-size:9px}@media print{@page{size:A4;margin:6mm}.label{border:1px solid #aaa}}</style></head><body><div class="grid">${labels}</div><script>window.onload=()=>window.print()</script></body></html>`);win.document.close()
+  }
+
+  async function connectBluetoothPrinter(){
+    try{
+      const bluetooth=(navigator as any).bluetooth
+      if(!bluetooth?.requestDevice){setPrinterStatus('Bluetooth printing is not supported by this browser. Pair the printer in device settings and use Print.');return}
+      setPrinterStatus('Searching for Bluetooth printers…')
+      const device=await bluetooth.requestDevice({acceptAllDevices:true,optionalServices:['000018f0-0000-1000-8000-00805f9b34fb','0000ff00-0000-1000-8000-00805f9b34fb','0000ffe0-0000-1000-8000-00805f9b34fb','battery_service']})
+      const server=await device.gatt.connect()
+      const services=await server.getPrimaryServices()
+      let writable:any=null
+      for(const service of services){
+        const chars=await service.getCharacteristics()
+        writable=chars.find((c:any)=>c.properties.writeWithoutResponse||c.properties.write)
+        if(writable)break
+      }
+      if(!writable){setPrinterStatus('Printer connected, but no compatible BLE print channel was found. Use the normal Print option.');return}
+      setBluetoothPrinter(device);setPrinterCharacteristic(writable);setPrinterStatus(`Connected: ${device.name||'Bluetooth printer'}`)
+      device.addEventListener('gattserverdisconnected',()=>{setPrinterCharacteristic(null);setBluetoothPrinter(null);setPrinterStatus('Printer disconnected')})
+    }catch(e){setPrinterStatus(e instanceof Error?e.message:'Bluetooth connection cancelled or failed')}
+  }
+
+  async function printBluetoothInvoice(){
+    if(!printerCharacteristic||!lastInvoice){setNotice('Connect a compatible BLE thermal printer first.');return}
+    const lines=[companySettings.company_name||'Store',companySettings.address||'',companySettings.phone||'',`Invoice: ${lastInvoice.invoice_no}`,new Date(lastInvoice.created_at).toLocaleString('en-LK'),'-'.repeat(32),...lastInvoice.items.map(i=>`${i.name} ${i.size}/${i.colour}\n${i.quantity} x ${money(i.unit_price)} = ${money(i.quantity*i.unit_price)}`),'-'.repeat(32),`Subtotal: ${money(lastInvoice.subtotal)}`,`Discount: ${money(lastInvoice.discount)}`,`TOTAL: ${money(lastInvoice.total)}`,`Paid: ${lastInvoice.payment_method}`,`Received: ${money(lastInvoice.amount_received)}`,`Change: ${money(lastInvoice.change_amount)}`,companySettings.receipt_footer||'Thank you!', '\n\n\n']
+    const encoder=new TextEncoder()
+    const payload=new Uint8Array([0x1b,0x40,...encoder.encode(lines.join('\n')),0x1d,0x56,0x00])
+    try{for(let offset=0;offset<payload.length;offset+=180){const chunk=payload.slice(offset,offset+180);if(printerCharacteristic.writeValueWithoutResponse)await printerCharacteristic.writeValueWithoutResponse(chunk);else await printerCharacteristic.writeValue(chunk)}setNotice('Receipt sent to Bluetooth printer.')}
+    catch(e){setNotice('Bluetooth print failed: '+(e instanceof Error?e.message:'Unknown error'))}
   }
 
   async function exportDataBackup() {
@@ -1105,8 +1176,8 @@ export default function App() {
     <button className="primary full" disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</button><p className="muted hint">User accounts are managed securely in Supabase.</p>
   </form></div>
 
-  return <div className={sidebarCollapsed ? 'shell sidebar-hidden' : 'shell'}>
-    <aside><div className="retail-brand"><div className="retail-brand-mark">{companySettings.logo_data_url ? <img src={companySettings.logo_data_url} alt="Company logo"/> : <Store size={19}/>}</div><div className="brand-copy"><h2>{companySettings.company_name || 'Clothing ERP'}</h2><small>{companySettings.tagline || 'RETAIL MANAGEMENT'}</small></div></div>{(supabaseConfigured && session ? (currentEmployeeRole === 'Admin' ? navigation : currentEmployeeRole === 'Manager' ? navigation.filter(item=>item!=='Settings') : currentEmployeeRole === 'Cashier' ? ['Overview','Point of Sale','Sales History','Customers','Customer Accounts','Attendance'] : currentEmployeeRole === 'Staff' ? ['Overview','Products & Stock','Attendance'] : ['Overview','Employees']) : navigation).map(item => { const Icon = moduleIcons[item] || CircleHelp; return <button key={item} className={page === item ? 'active' : ''} onClick={() => setPage(item)} title={sidebarCollapsed ? item : undefined}><Icon size={17} strokeWidth={2}/><span className="nav-label">{item}</span></button> })}{supabaseConfigured && session && <a className="accounting-nav-link" href="/clothing-shop-erp/leave/" target="_blank" rel="noreferrer"><CalendarCheck size={17} strokeWidth={2}/> <span className="nav-label">Leave Management</span> <span className="accounting-nav-arrow">↗</span></a>}{supabaseConfigured && session && ['Admin','Manager'].includes(currentEmployeeRole || '') && <a className="accounting-nav-link" href="/clothing-shop-erp/accounting/" target="_blank" rel="noreferrer"><BookOpen size={17} strokeWidth={2}/> <span className="nav-label">Accounting</span> <span className="accounting-nav-arrow">↗</span></a>}</aside>
+  return <div className={sidebarCollapsed ? 'shell sidebar-collapsed' : 'shell'}>
+    <aside><div className="retail-brand"><div className="retail-brand-mark">{companySettings.logo_data_url ? <img src={companySettings.logo_data_url} alt="Company logo"/> : <Store size={19}/>}</div><div className="brand-copy"><h2>{companySettings.company_name || 'Clothing ERP'}</h2><small>{companySettings.tagline || 'RETAIL MANAGEMENT'}</small></div></div>{(supabaseConfigured && session ? (currentEmployeeRole === 'Admin' ? navigation : currentEmployeeRole === 'Manager' ? navigation.filter(item=>item!=='Settings') : currentEmployeeRole === 'Cashier' ? ['Overview','Point of Sale','Sales History','Customers','Customer Accounts','Attendance'] : currentEmployeeRole === 'Staff' ? ['Overview','Products & Stock','Attendance'] : ['Overview','Employees']) : navigation).map(item => { const Icon = moduleIcons[item] || CircleHelp; return <button key={item} className={page === item ? 'active' : ''} onClick={() => setPage(item)} title={sidebarCollapsed ? item : undefined}><Icon size={17} strokeWidth={2}/><span className="nav-label">{item}</span></button> })}{supabaseConfigured && session && <a className="accounting-nav-link" href="/clothing-shop-erp/leave/" title={sidebarCollapsed?'Attendance & Leave':undefined}><CalendarCheck size={18} strokeWidth={2}/> <span className="nav-label">Attendance & Leave</span><span className="accounting-nav-arrow">↗</span></a>}{supabaseConfigured && session && ['Admin','Manager'].includes(currentEmployeeRole || '') && <a className="accounting-nav-link" href="/clothing-shop-erp/accounting/" title={sidebarCollapsed?'Accounting':undefined}><BookOpen size={18} strokeWidth={2}/> <span className="nav-label">Accounting</span><span className="accounting-nav-arrow">↗</span></a>}</aside>
     <main><header><div className="header-left"><button className="sidebar-toggle" onClick={()=>setSidebarCollapsed(value=>!value)} aria-label={sidebarCollapsed ? 'Show sidebar' : 'Hide sidebar'} title={sidebarCollapsed ? 'Show sidebar' : 'Hide sidebar'}>{sidebarCollapsed ? <PanelLeftOpen size={18}/> : <PanelLeftClose size={18}/>}</button><b>Workspace / {page}</b></div><div className="header-actions"><span className={supabaseConfigured ? 'ok' : 'demo'}>{supabaseConfigured ? 'Supabase connected' : 'Demo mode'}</span><button className="icon-button refresh-button" onClick={()=>window.location.reload()} aria-label="Refresh workspace" title="Refresh workspace"><RefreshCw size={16}/></button>{session && <button className="text-button" onClick={() => void signOut()}>Sign out</button>}</div></header>
       <section>
         {notice && <p className="notice">{notice}<button className="dismiss" onClick={() => setNotice('')}>×</button></p>}
@@ -1412,10 +1483,10 @@ export default function App() {
               {filtered.length === 0 && <tr><td colSpan={8}>No products found.</td></tr>}</tbody></table></div>
           </article>
         </> : page === 'Point of Sale' ? <>
-          <div className="heading"><div><p className="eyebrow">CHECKOUT</p><h1>Point of Sale</h1><p>Scan a barcode or select a size and colour variant.</p></div><span className={supabaseConfigured ? 'ok' : 'demo'}>{supabaseConfigured ? 'Live inventory' : 'Demo inventory'}</span></div>
+          <div className="heading"><div><p className="eyebrow">CHECKOUT</p><h1>Point of Sale</h1><p>Scan a barcode or select a size and colour variant.</p></div><div className="pos-device-actions"><span className={supabaseConfigured ? 'ok' : 'demo'}>{supabaseConfigured ? 'Live inventory' : 'Demo inventory'}</span><button onClick={()=>void connectBluetoothPrinter()}><Bluetooth size={15}/> {bluetoothPrinter?'Printer connected':'Connect Bluetooth printer'}</button><small>{printerStatus}</small></div></div>
           <div className="pos-layout">
             <div className="pos-products">
-              <form className="barcode-form" onSubmit={addBarcode}><input autoFocus aria-label="Barcode, SKU or product number" placeholder="Scan barcode / enter SKU / Product No." value={barcodeInput} onChange={e => setBarcodeInput(e.target.value)} /><button className="primary">Add</button></form>
+              <form className="barcode-form" onSubmit={addBarcode}><input autoFocus aria-label="Barcode, SKU or product number" placeholder="Scan barcode / enter SKU / Product No." value={barcodeInput} onChange={e => setBarcodeInput(e.target.value)} /><button className="primary">Add</button><button type="button" className="camera-scan-button" onClick={()=>setCameraScanning(v=>!v)}><Camera size={16}/>{cameraScanning?'Stop camera':'Scan with phone'}</button></form>{cameraScanning&&<div className="pos-camera-panel"><div id="pos-camera-reader"/><p className="muted">Point your phone camera at a product barcode.</p></div>}
               <input className="pos-search" placeholder="Search products, product no. or colour…" value={posQuery} onChange={e => setPosQuery(e.target.value)} />
               <div className="pos-grid">{posVariants.filter(v => `${v.product_no} ${v.product_name} ${v.sku} ${v.size} ${v.colour}`.toLowerCase().includes(posQuery.toLowerCase())).map(v =>
                 <article className="pos-item" key={v.id}><small>{v.product_no} · {v.sku}</small><h3>{v.product_name}</h3><p>{v.size} / {v.colour}</p><b>{money(v.selling_price)}</b><div className="pos-item-bottom"><span>{v.quantity} in stock</span><button disabled={v.quantity < 1} onClick={() => addToCart(v)}>Add +</button></div></article>)}
@@ -1429,7 +1500,7 @@ export default function App() {
               <form onSubmit={completeSale} className="checkout-form"><label>Customer<select value={selectedCustomer} onChange={e => setSelectedCustomer(e.target.value)}><option value="">Walk-in customer</option>{customers.map(c => <option key={c.id} value={c.id}>{c.full_name}{c.phone ? ` · ${c.phone}` : ''}</option>)}</select></label><label>Payment method<select value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)}><option>Cash</option><option>Card</option><option>Bank Transfer</option><option>Credit</option></select></label>{paymentMethod==='Credit' && <label>Initial payment method<select value={creditPaymentMethod} onChange={e=>setCreditPaymentMethod(e.target.value)}><option>Cash</option><option>Card</option><option>Bank Transfer</option><option>Cheque</option></select></label>}<label>Amount received (LKR)<input required type="number" min={paymentMethod==='Credit'?0:cartTotal} max={paymentMethod==='Credit'?Math.max(0,cartTotal-0.01):undefined} step="0.01" value={amountReceived} onChange={e => setAmountReceived(e.target.value)} placeholder={paymentMethod==='Credit'?'0':String(cartTotal)} /></label>{paymentMethod==='Credit' ? <p className="change-due">Outstanding: <b>{money(Math.max(0,cartTotal-(Number(amountReceived)||0)))}</b></p> : <p className="change-due">Change: <b>{money(Math.max(0,(Number(amountReceived)||0)-cartTotal))}</b></p>}<button className="primary full" disabled={busy || cart.length===0}>{busy ? 'Processing…' : 'Complete Sale'}</button></form>
             </article>
           </div>
-          {lastInvoice && <div className="invoice-preview"><div className="invoice-company"><div className="invoice-company-logo">{companySettings.logo_data_url ? <img src={companySettings.logo_data_url} alt="Company logo"/> : <Store size={20}/>}</div><div><h2>{companySettings.company_name}</h2>{companySettings.tagline&&<p>{companySettings.tagline}</p>}{companySettings.address&&<p>{companySettings.address}</p>}{[companySettings.phone,companySettings.email,companySettings.website].filter(Boolean).join(' · ')&&<p>{[companySettings.phone,companySettings.email,companySettings.website].filter(Boolean).join(' · ')}</p>}</div></div><div className="heading"><div><p className="eyebrow">SALE COMPLETED</p><h2>Invoice {lastInvoice.invoice_no}</h2></div><button className="primary" onClick={() => window.print()}>Print invoice</button></div><p>{new Date(lastInvoice.created_at).toLocaleString()}</p><div className="tablewrap"><table><thead><tr><th>ITEM</th><th>SIZE / COLOUR</th><th>QTY</th><th>PRICE</th><th>AMOUNT</th></tr></thead><tbody>{lastInvoice.items.map((line,i)=><tr key={i}><td>{line.name}<small>{line.product_no}</small></td><td>{line.size} / {line.colour}</td><td>{line.quantity}</td><td>{money(line.unit_price)}</td><td>{money(line.unit_price*line.quantity)}</td></tr>)}</tbody></table></div><p>Subtotal: {money(lastInvoice.subtotal)} · Discount: {money(lastInvoice.discount)} · <b>Total: {money(lastInvoice.total)}</b></p><p>{lastInvoice.payment_method==='Credit' ? <>Credit sale · Initial payment {money(lastInvoice.amount_received)} · <b>Outstanding {money(lastInvoice.total-lastInvoice.amount_received)}</b></> : <>Paid by {lastInvoice.payment_method} · Received {money(lastInvoice.amount_received)} · Change {money(lastInvoice.change_amount)}</>}</p>{companySettings.invoice_note&&<p className="invoice-footer-note">{companySettings.invoice_note}</p>}<p className="invoice-footer-note">{companySettings.receipt_footer}</p></div>}
+          {lastInvoice && <div className="invoice-preview"><div className="invoice-company"><div className="invoice-company-logo">{companySettings.logo_data_url ? <img src={companySettings.logo_data_url} alt="Company logo"/> : <Store size={20}/>}</div><div><h2>{companySettings.company_name}</h2>{companySettings.tagline&&<p>{companySettings.tagline}</p>}{companySettings.address&&<p>{companySettings.address}</p>}{[companySettings.phone,companySettings.email,companySettings.website].filter(Boolean).join(' · ')&&<p>{[companySettings.phone,companySettings.email,companySettings.website].filter(Boolean).join(' · ')}</p>}</div></div><div className="heading"><div><p className="eyebrow">SALE COMPLETED</p><h2>Invoice {lastInvoice.invoice_no}</h2></div><div className="invoice-print-actions"><button className="primary" onClick={() => window.print()}><Printer size={15}/> Print invoice</button><button onClick={()=>void printBluetoothInvoice()} disabled={!printerCharacteristic}><Bluetooth size={15}/> Print via Bluetooth</button></div></div><p>{new Date(lastInvoice.created_at).toLocaleString()}</p><div className="tablewrap"><table><thead><tr><th>ITEM</th><th>SIZE / COLOUR</th><th>QTY</th><th>PRICE</th><th>AMOUNT</th></tr></thead><tbody>{lastInvoice.items.map((line,i)=><tr key={i}><td>{line.name}<small>{line.product_no}</small></td><td>{line.size} / {line.colour}</td><td>{line.quantity}</td><td>{money(line.unit_price)}</td><td>{money(line.unit_price*line.quantity)}</td></tr>)}</tbody></table></div><p>Subtotal: {money(lastInvoice.subtotal)} · Discount: {money(lastInvoice.discount)} · <b>Total: {money(lastInvoice.total)}</b></p><p>{lastInvoice.payment_method==='Credit' ? <>Credit sale · Initial payment {money(lastInvoice.amount_received)} · <b>Outstanding {money(lastInvoice.total-lastInvoice.amount_received)}</b></> : <>Paid by {lastInvoice.payment_method} · Received {money(lastInvoice.amount_received)} · Change {money(lastInvoice.change_amount)}</>}</p>{companySettings.invoice_note&&<p className="invoice-footer-note">{companySettings.invoice_note}</p>}<p className="invoice-footer-note">{companySettings.receipt_footer}</p></div>}
         </> : page === 'Customers' ? <>
           <div className="heading"><div><p className="eyebrow">CUSTOMER DIRECTORY</p><h1>Customers</h1><p>Save customer contact details and see their purchase totals.</p></div></div>
           <div className="customer-layout">
