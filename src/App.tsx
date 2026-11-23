@@ -964,17 +964,20 @@ export default function App() {
   }
 
   const filtered = products.filter(p => `${p.product_no} ${p.name} ${p.sku} ${p.category || ''}`.toLowerCase().includes(query.toLowerCase()))
-  const todayKey = new Date().toLocaleDateString('en-CA')
+  const todayKey = localBusinessDate()
   const monthKey = todayKey.slice(0,7)
   const dateInRange = (value: string, start: string, end: string) => {
-    const key = String(value || '').slice(0,10)
+    const raw = String(value || '')
+    const key = raw.includes('T')
+      ? new Date(raw).toLocaleDateString('en-CA', { timeZone: 'Asia/Colombo' })
+      : raw.slice(0,10)
     return key >= start && key <= end
   }
-  const todaySales = sales.filter(s => String(s.created_at).slice(0,10) === todayKey)
-  const monthSales = sales.filter(s => String(s.created_at).slice(0,7) === monthKey)
+  const todaySales = sales.filter(s => dateInRange(s.created_at,todayKey,todayKey))
+  const monthSales = sales.filter(s => dateInRange(s.created_at,`${monthKey}-01`,todayKey))
   const todayRevenue = todaySales.reduce((sum,s)=>sum+Number(s.total),0)
   const monthRevenue = monthSales.reduce((sum,s)=>sum+Number(s.total),0)
-  const monthReturns = returns.filter(r=>String(r.created_at).slice(0,7)===monthKey)
+  const monthReturns = returns.filter(r=>dateInRange(r.created_at,`${monthKey}-01`,todayKey))
   const monthRefunds = monthReturns.reduce((sum,r)=>sum+Number(r.refund_total),0)
   const monthCOGS = monthSales.reduce((sum,s)=>sum+(s.sale_items||[]).reduce((n:number,line:any)=>n+Number(line.unit_cost||0)*Number(line.quantity||0),0),0)
     - monthReturns.filter(r=>r.restock_items).reduce((sum,r)=>sum+(r.sales_return_items||[]).reduce((n:number,line:any)=>{const sold=monthSales.flatMap(s=>s.sale_items||[]).find((x:any)=>x.id===line.sale_item_id);return n+Number(sold?.unit_cost||0)*Number(line.quantity||0)},0),0)
@@ -1169,7 +1172,7 @@ export default function App() {
               {sales.filter(s => {
                 const customer = Array.isArray(s.customers) ? s.customers[0] : s.customers
                 const term = `${s.invoice_no} ${customer?.full_name || 'Walk-in'} ${customer?.phone || ''}`.toLowerCase()
-                return term.includes(salesQuery.toLowerCase()) && (!salesDate || new Date(s.created_at).toLocaleDateString('en-CA') === salesDate)
+                return term.includes(salesQuery.toLowerCase()) && (!salesDate || new Date(s.created_at).toLocaleDateString('en-CA',{timeZone:'Asia/Colombo'}) === salesDate)
               }).map(s => { const customer = Array.isArray(s.customers) ? s.customers[0] : s.customers; return <tr key={s.id}><td>{new Date(s.created_at).toLocaleString()}</td><td><b>{s.invoice_no}</b></td><td>{customer?.full_name || 'Walk-in customer'}</td><td>{s.payment_method}</td><td>{s.sale_items?.reduce((n:number,i:any)=>n+i.quantity,0) || 0}</td><td>{money(Number(s.total))}</td><td><button className="small-action" onClick={() => setSelectedSale(s)}>View invoice</button></td></tr> })}
               {sales.length === 0 && <tr><td colSpan={7}>No sales recorded yet.</td></tr>}
             </tbody></table></div>
