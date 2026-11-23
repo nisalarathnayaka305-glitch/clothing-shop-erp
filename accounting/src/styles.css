@@ -457,3 +457,13 @@ html[data-theme="dark"] .module-switcher a.current,html[data-theme="dark"] .nav-
 html[data-theme="dark"] input,html[data-theme="dark"] select,html[data-theme="dark"] textarea{background:#172235!important;color:#e5edf7!important;border-color:#40516a!important}
 html[data-theme="dark"] table th{background:#202e42!important;color:#b4c4d7!important}
 html[data-theme="dark"] table td{border-color:#34445a!important;color:#d7e2ef!important}
+
+
+/* Explicit light mode wins over all legacy dark sidebar styles */
+html[data-theme="light"] body,html[data-theme="light"] .app-shell,html[data-theme="light"] .main-area{background:#f4f7fb!important;color:#1c3049!important}
+html[data-theme="light"] .sidebar{background:#fff!important;color:#263c57!important;border-right:1px solid #e5ebf3!important;box-shadow:4px 0 20px rgba(25,52,83,.025)!important}
+html[data-theme="light"] .brand strong{color:#192f4b!important}
+html[data-theme="light"] .brand small{color:#8394a8!important}
+html[data-theme="light"] .module-switcher a,html[data-theme="light"] .nav-item{color:#61738d!important}
+html[data-theme="light"] .module-switcher a:hover,html[data-theme="light"] .module-switcher a.current,html[data-theme="light"] .nav-item:hover,html[data-theme="light"] .nav-item.active{background:#edf4ff!important;color:#2868b8!important;box-shadow:none!important;border-color:#dce9f6!important}
+html[data-theme="light"] .topbar,html[data-theme="light"] .panel,html[data-theme="light"] .metric-card,html[data-theme="light"] .statement{background:#fff!important;color:#1c3049!important}
