@@ -37,7 +37,7 @@ The example environment file is configured for the linked Supabase project. The 
 
 ## Supabase database setup
 
-The linked project has migrations `0001` through `0016` applied. For a fresh environment, apply every file in `supabase/migrations` in numeric order.
+The linked project has migrations `0001` through `0030` applied. For a fresh environment, apply every file in `supabase/migrations` in numeric order.
 
 The migrations create 19 public tables, all with Row Level Security enabled. Migration 0015 hardens nullable employee-role checks and removes anonymous execution from public functions. Migration 0016 removes direct RPC execution from trigger-only helper functions.
 
