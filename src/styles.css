@@ -371,3 +371,44 @@ input:focus,select:focus,textarea:focus{
 .retail-brand-mark img{width:100%;height:100%;object-fit:contain;padding:4px}
 .company-brand-card .logo-actions{margin-top:12px}
 .invoice-company-logo img{width:100%;height:100%;object-fit:contain;padding:5px}
+
+
+/* Unified ERP shell, persistent collapsed icon navigation and POS devices */
+.shell>aside{background:linear-gradient(180deg,#10233f 0%,#152d4d 58%,#183653 100%);border-right:0;color:#dbe7f3}
+.shell>aside h2{color:#fff}
+.shell>aside small{color:#9eb5cf}
+.shell>aside>button{display:flex;align-items:center;gap:12px;color:#c4d3e4;font-size:12px;font-weight:600}
+.shell>aside>button.active{background:rgba(68,145,226,.2);color:#fff;box-shadow:inset 3px 0 #75b8ff}
+.retail-brand{justify-content:flex-start;min-height:74px;padding:0 7px 20px}
+.retail-brand-mark{width:58px;height:58px;flex:0 0 58px;border-radius:14px;overflow:hidden;background:#fff;display:grid;place-items:center}
+.retail-brand-mark img{width:100%;height:100%;object-fit:contain;padding:3px}
+.retail-brand h2{font-size:14px;color:#fff}
+.retail-brand small{color:#9eb5cf}
+.shell.sidebar-collapsed>aside{width:78px;padding:22px 10px}
+.shell.sidebar-collapsed>main{margin-left:78px}
+.shell.sidebar-collapsed .retail-brand{justify-content:center;padding:0 0 20px}
+.shell.sidebar-collapsed .retail-brand-mark{width:52px;height:52px;flex-basis:52px}
+.shell.sidebar-collapsed .brand-copy,.shell.sidebar-collapsed .nav-label,.shell.sidebar-collapsed .accounting-nav-arrow{display:none}
+.shell.sidebar-collapsed>aside>button{justify-content:center;padding:12px 8px;gap:0}
+.shell.sidebar-collapsed>aside>button svg{width:19px;height:19px}
+.shell.sidebar-collapsed>aside .accounting-nav-link{width:48px;height:46px;justify-content:center;padding:10px;margin:12px auto}
+.shell.sidebar-collapsed>aside .accounting-nav-link svg{margin:0}
+.pos-device-actions,.invoice-print-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.pos-device-actions>button,.invoice-print-actions>button,.camera-scan-button{display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:9px 12px;border:1px solid #d8e2ee;border-radius:8px;background:#fff;color:#31516f;font-size:11px;font-weight:700;cursor:pointer}
+.pos-device-actions small{flex-basis:100%;color:#8293a7;text-align:right;font-size:10px}
+.camera-scan-button{white-space:nowrap}
+.pos-camera-panel{max-width:520px;margin:12px auto 18px;padding:12px;border:1px solid #e2eaf3;border-radius:12px;background:#fff}
+#pos-camera-reader{max-width:100%}
+#pos-camera-reader video{max-height:340px;object-fit:cover}
+.invoice-print-actions .primary{margin:0!important}
+@media(max-width:750px){
+ .shell.sidebar-collapsed>aside{width:auto;padding:12px}
+ .shell.sidebar-collapsed .retail-brand{justify-content:center}
+ .shell.sidebar-collapsed>aside>button{display:inline-flex;width:42px;margin:3px}
+ .shell.sidebar-collapsed>aside .accounting-nav-link{display:inline-flex;width:42px;height:42px;margin:3px}
+ .pos-device-actions{justify-content:flex-start}
+ .pos-device-actions small{text-align:left}
+ .barcode-form{flex-wrap:wrap}
+ .barcode-form input{flex:1 1 100%}
+}
+@media print{.pos-device-actions,.camera-scan-button,.pos-camera-panel{display:none!important}}
