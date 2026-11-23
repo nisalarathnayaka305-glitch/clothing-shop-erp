@@ -250,12 +250,13 @@ export default function App() {
       .gte('work_date',payrollStart).lte('work_date',payrollEnd).limit(10000)
     if (attendanceError) { setNotice(attendanceError.message); setBusy(false); return }
     const items=active.map(employee=>{
-      const rows=(periodAttendance||[]).filter(r=>r.employee_id===employee.id)
+      const salaryStart = employee.hire_date && employee.hire_date > payrollStart ? employee.hire_date : payrollStart
+      const rows=(periodAttendance||[]).filter(r=>r.employee_id===employee.id && r.work_date>=salaryStart)
       const hours=rows.reduce((sum,r)=>sum+attendanceHours(r),0)
       const days=rows.reduce((sum,r)=>sum+(r.status==='Half-day'?0.5:['Present','Late'].includes(r.status)?1:0),0)
       const basis=employee.salary_basis||'Monthly'
       const rate=Number(employee.base_salary||0)
-      const gross=basis==='Hourly'?hours*rate:monthlyPayForPeriod(rate,payrollStart,payrollEnd)
+      const gross=basis==='Hourly'?hours*rate:monthlyPayForPeriod(rate,salaryStart,payrollEnd)
       const rawDeduction=Number(payrollDeductions[employee.id]||0); const deduction=Math.min(gross,Math.max(0,Number.isFinite(rawDeduction)?rawDeduction:0))
       return { employee_id:employee.id,salary_basis:basis,base_salary:rate,days_present:days,hours_worked:Number(hours.toFixed(2)),gross_pay:Number(gross.toFixed(2)),deductions:Number(deduction.toFixed(2)),net_pay:Number((gross-deduction).toFixed(2)) }
     })
@@ -273,6 +274,7 @@ export default function App() {
 
   async function markPayrollPaid(run: any) {
     if (!['Admin','Manager'].includes(currentEmployeeRole || '') || run.status!=='Draft') return
+    if (!Number.isFinite(Number(run.total_net)) || Number(run.total_net) <= 0) { setNotice('This payroll has zero net pay. Review employee salary details and payroll items before marking it as paid.'); return }
     if (!window.confirm('Confirm that all employees in this payroll run have actually been paid?')) return
     const { error }=await supabase!.from('payroll_runs').update({status:'Paid',paid_at:new Date().toISOString()}).eq('id',run.id)
     if(error) setNotice(error.message)
@@ -984,7 +986,7 @@ export default function App() {
   const reportOperatingExpenses = reportExpenses.filter(e=>e.category!=='Supplier Payment').reduce((sum,e)=>sum+Number(e.amount),0)
   const reportGrossProfit = reportRevenue-reportRefunds-reportCOGS
   const reportNetProfit = reportGrossProfit-reportOperatingExpenses
-  const paymentBreakdown = ['Cash','Card','Bank Transfer'].map(method=>({method,count:reportSales.filter(s=>s.payment_method===method).length,total:reportSales.filter(s=>s.payment_method===method).reduce((sum,s)=>sum+Number(s.total),0)}))
+  const paymentBreakdown = ['Cash','Card','Bank Transfer','Credit'].map(method=>({method,count:reportSales.filter(s=>s.payment_method===method).length,total:reportSales.filter(s=>s.payment_method===method).reduce((sum,s)=>sum+Number(s.total),0)}))
   const topProducts = Object.values(reportSales.flatMap(s=>s.sale_items||[]).reduce((acc:any,line:any)=>{const key=line.product_no||line.product_name;acc[key]??={name:line.product_name,productNo:line.product_no,quantity:0,revenue:0};acc[key].quantity+=Number(line.quantity);acc[key].revenue+=Number(line.line_total);return acc},{})).sort((x:any,y:any)=>y.quantity-x.quantity).slice(0,8)
   const expenseBreakdown = Object.values(reportExpenses.reduce((acc:any,e:any)=>{acc[e.category]??={category:e.category,total:0,count:0};acc[e.category].total+=Number(e.amount);acc[e.category].count++;return acc},{})).sort((x:any,y:any)=>y.total-x.total)
   const lowStockItems = posVariants.filter(v=>v.quantity<=v.reorder_level).sort((x,y)=>x.quantity-y.quantity).slice(0,8)
