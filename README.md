@@ -11,6 +11,8 @@ A single-shop clothing retail ERP built with React, TypeScript, Vite and Supabas
 - Employee directory, role-based access, attendance and basic payroll
 - Supplier accounts and invoice-level supplier payments
 - Customer credit sales, accounts receivable and payment collection
+- Company profile, logo upload, contact details and invoice/receipt branding
+- Separate Accounting workspace with automatic posting for new ERP transactions
 
 
 ## Standalone Accounting Workspace
@@ -87,6 +89,8 @@ Use the same linked Supabase project URL and publishable key from `.env.example`
 ## Production readiness notes
 
 - Create the first owner Auth user and bootstrap the Admin employee before staff sign-in.
+- Complete Company Settings with the legal shop name, logo, contact details and receipt footer before printing customer invoices.
+- Add the real product catalogue and opening stock quantities before enabling day-to-day POS sales.
 - Verify sign-in, employee role assignment and each workflow using real test accounts.
 - Payroll is a basic salary register, not a statutory Sri Lankan EPF/ETF/PAYE or overtime calculation engine.
 - Take regular database backups and test restore procedures before storing live shop data.
