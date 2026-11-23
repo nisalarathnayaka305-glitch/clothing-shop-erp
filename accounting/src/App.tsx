@@ -217,7 +217,7 @@ function App() {
     .flatMap(entry => (entry.acct_journal_lines || []).flatMap(line => {
       const account = accountById.get(line.account_id)
       const debit = amount(line.debit)
-      if (!account || !['Expense','Other Expense'].includes(account.account_type) || debit <= 0) return []
+      if (!account || account.account_type !== 'Expense' || debit <= 0) return []
       return [{ date: entry.entry_date, entryNo: entry.entry_no, description: entry.description, reference: entry.reference, code: account.code, account: account.name, memo: line.memo || '', amount: debit }]
     })), [postedEntries, accountById, fromDate, toDate])
   const balance = useMemo(() => {
