@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent, type ChangeEvent } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { supabase, supabaseConfigured, money, type Product, type ProductVariant } from './lib'
 
@@ -16,6 +16,11 @@ type CartLine = { variant_id: string; product_no: string; name: string; sku: str
 type Invoice = { invoice_no: string; subtotal: number; discount: number; total: number; amount_received: number; change_amount: number; payment_method: string; created_at: string; items: CartLine[] }
 
 const navigation = ['Overview', 'Point of Sale', 'Sales History', 'Returns & Exchanges', 'Products & Stock', 'Purchases', 'Purchase Orders', 'Customers', 'Customer Accounts', 'Loyalty', 'Cash Management', 'Suppliers', 'Supplier Accounts', 'Expenses', 'Reports', 'Employees', 'Attendance', 'Payroll', 'Settings']
+const defaultCompanySettings = {
+  id: true, company_name: 'Your Clothing Store', tagline: 'Clothing & Retail',
+  phone: '', email: '', address: '', website: '', logo_data_url: '',
+  currency_code: 'LKR', receipt_footer: 'Thank you for shopping with us!', invoice_note: ''
+}
 const localBusinessDate = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Colombo' }).format(new Date())
 const localBusinessMonthRange = () => {
   const [year, month] = localBusinessDate().split('-').map(Number)
@@ -107,6 +112,7 @@ export default function App() {
   const [payrollStart, setPayrollStart] = useState(localBusinessMonthRange().start)
   const [payrollEnd, setPayrollEnd] = useState(localBusinessMonthRange().end)
   const [payrollDeductions, setPayrollDeductions] = useState<Record<string,string>>({})
+  const [companySettings, setCompanySettings] = useState<any>(defaultCompanySettings)
 
 
   useEffect(() => {
@@ -124,6 +130,68 @@ export default function App() {
     })
     return () => { mounted = false; listener.subscription.unsubscribe() }
   }, [])
+
+  useEffect(() => {
+    if (supabase && session) void loadCompanySettings()
+    else setCompanySettings(defaultCompanySettings)
+  }, [session])
+
+  async function loadCompanySettings() {
+    if (!supabase || !session) return
+    const { data, error } = await supabase.from('company_settings').select('*').eq('id', true).maybeSingle()
+    if (error) setNotice(error.message)
+    else if (data) setCompanySettings(data)
+  }
+
+  function handleCompanyLogo(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    if (!file) return
+    if (!['image/png','image/jpeg','image/webp'].includes(file.type)) {
+      setNotice('Please upload a PNG, JPG or WebP logo.')
+      event.target.value = ''
+      return
+    }
+    if (file.size > 1024 * 1024) {
+      setNotice('Logo must be smaller than 1 MB.')
+      event.target.value = ''
+      return
+    }
+    const reader = new FileReader()
+    reader.onload = () => setCompanySettings((current:any) => ({ ...current, logo_data_url: String(reader.result || '') }))
+    reader.readAsDataURL(file)
+  }
+
+  async function saveCompanySettings(event: FormEvent) {
+    event.preventDefault()
+    if (!supabase || !session || currentEmployeeRole !== 'Admin') {
+      setNotice('Only the Admin can update company settings.')
+      return
+    }
+    if (!companySettings.company_name.trim()) {
+      setNotice('Please enter your company name.')
+      return
+    }
+    setBusy(true)
+    const payload = {
+      id: true,
+      company_name: companySettings.company_name.trim(),
+      tagline: companySettings.tagline.trim(),
+      phone: companySettings.phone.trim(),
+      email: companySettings.email.trim(),
+      address: companySettings.address.trim(),
+      website: companySettings.website.trim(),
+      logo_data_url: companySettings.logo_data_url || '',
+      currency_code: 'LKR',
+      receipt_footer: companySettings.receipt_footer.trim(),
+      invoice_note: companySettings.invoice_note.trim(),
+      updated_by: session.user.id,
+      updated_at: new Date().toISOString()
+    }
+    const { data, error } = await supabase.from('company_settings').upsert(payload, { onConflict: 'id' }).select('*').single()
+    if (error) setNotice('Could not save company settings: ' + error.message)
+    else { setCompanySettings(data); setNotice('Company profile and receipt settings saved successfully.') }
+    setBusy(false)
+  }
 
   async function loadEmployees() {
     if (!supabase || !session) return
@@ -950,7 +1018,7 @@ export default function App() {
   async function exportDataBackup() {
     if (!supabase || !session) { setNotice('Sign in to export a database backup.'); return }
     setBusy(true)
-    const tables = ['products','product_variants','stock_balances','stock_movements','customers','suppliers','sales','sale_items','sales_returns','sales_return_items','purchase_orders','purchase_items','supplier_payments','customer_payments','expenses','employees','employee_attendance','payroll_runs','payroll_items']
+    const tables = ['company_settings','products','product_variants','stock_balances','stock_movements','customers','suppliers','sales','sale_items','sales_returns','sales_return_items','purchase_orders','purchase_items','purchase_requests','purchase_request_items','supplier_payments','customer_payments','customer_loyalty_ledger','expenses','employees','employee_attendance','payroll_runs','payroll_items','cash_sessions','cash_session_entries','acct_accounts','acct_fiscal_periods','acct_journal_entries','acct_journal_lines']
     const backup: Record<string, unknown> = { exported_at: new Date().toISOString(), format_version: 1, tables: {} }
     for (const table of tables) {
       const { data, error } = await supabase.from(table).select('*').limit(10000)
@@ -1012,7 +1080,7 @@ export default function App() {
   </form></div>
 
   return <div className="shell">
-    <aside><h2>◈ Clothing ERP</h2><small>RETAIL MANAGEMENT</small>{(supabaseConfigured && session ? (currentEmployeeRole === 'Admin' ? navigation : currentEmployeeRole === 'Manager' ? navigation.filter(item=>item!=='Settings') : currentEmployeeRole === 'Cashier' ? ['Overview','Point of Sale','Sales History','Customers','Customer Accounts','Attendance'] : currentEmployeeRole === 'Staff' ? ['Overview','Products & Stock','Attendance'] : ['Overview','Employees']) : navigation).map(item => <button key={item} className={page === item ? 'active' : ''} onClick={() => setPage(item)}>{item}</button>)}{supabaseConfigured && session && ['Admin','Manager'].includes(currentEmployeeRole || '') && <a className="accounting-nav-link" href="/clothing-shop-erp/accounting/" target="_blank" rel="noreferrer"><span>▤</span> Accounting <span className="accounting-nav-arrow">↗</span></a>}</aside>
+    <aside><div className="retail-brand">{companySettings.logo_data_url?<img src={companySettings.logo_data_url} alt="Company logo"/>:<span className="retail-brand-mark">◈</span>}<div><h2>{companySettings.company_name || 'Clothing ERP'}</h2><small>{companySettings.tagline || 'RETAIL MANAGEMENT'}</small></div></div>{(supabaseConfigured && session ? (currentEmployeeRole === 'Admin' ? navigation : currentEmployeeRole === 'Manager' ? navigation.filter(item=>item!=='Settings') : currentEmployeeRole === 'Cashier' ? ['Overview','Point of Sale','Sales History','Customers','Customer Accounts','Attendance'] : currentEmployeeRole === 'Staff' ? ['Overview','Products & Stock','Attendance'] : ['Overview','Employees']) : navigation).map(item => <button key={item} className={page === item ? 'active' : ''} onClick={() => setPage(item)}>{item}</button>)}{supabaseConfigured && session && ['Admin','Manager'].includes(currentEmployeeRole || '') && <a className="accounting-nav-link" href="/clothing-shop-erp/accounting/" target="_blank" rel="noreferrer"><span>▤</span> Accounting <span className="accounting-nav-arrow">↗</span></a>}</aside>
     <main><header><b>Workspace / {page}</b><div className="header-actions"><span className={supabaseConfigured ? 'ok' : 'demo'}>{supabaseConfigured ? 'Supabase connected' : 'Demo mode'}</span>{session && <button className="text-button" onClick={() => void signOut()}>Sign out</button>}</div></header>
       <section>
         {notice && <p className="notice">{notice}<button className="dismiss" onClick={() => setNotice('')}>×</button></p>}
@@ -1177,7 +1245,7 @@ export default function App() {
               {sales.length === 0 && <tr><td colSpan={7}>No sales recorded yet.</td></tr>}
             </tbody></table></div>
           </article>
-          {selectedSale && <div className="invoice-preview"><div className="heading"><div><p className="eyebrow">INVOICE DETAILS</p><h2>{selectedSale.invoice_no}</h2></div><button onClick={() => setSelectedSale(null)}>Close</button><button className="primary" onClick={() => window.print()}>Print</button></div><p>{new Date(selectedSale.created_at).toLocaleString()} · {selectedSale.payment_method}</p><div className="tablewrap"><table><thead><tr><th>PRODUCT</th><th>SIZE / COLOUR</th><th>QTY</th><th>UNIT PRICE</th><th>LINE TOTAL</th></tr></thead><tbody>{(selectedSale.sale_items || []).map((i:any)=><tr key={i.id}><td>{i.product_name}<small>{i.product_no} · {i.sku}</small></td><td>{i.size} / {i.colour}</td><td>{i.quantity}</td><td>{money(Number(i.unit_price))}</td><td>{money(Number(i.line_total))}</td></tr>)}</tbody></table></div><p>Subtotal: {money(Number(selectedSale.subtotal))} · Discount: {money(Number(selectedSale.discount))} · <b>Total: {money(Number(selectedSale.total))}</b></p><p>Received: {money(Number(selectedSale.amount_received))} · Change: {money(Number(selectedSale.change_amount))}</p></div>}
+          {selectedSale && <div className="invoice-preview"><div className="invoice-company"><div className="invoice-company-logo">{companySettings.logo_data_url?<img src={companySettings.logo_data_url} alt="Company logo"/>:<span>◈</span>}</div><div><h2>{companySettings.company_name}</h2>{companySettings.tagline&&<p>{companySettings.tagline}</p>}{companySettings.address&&<p>{companySettings.address}</p>}{[companySettings.phone,companySettings.email,companySettings.website].filter(Boolean).join(' · ')&&<p>{[companySettings.phone,companySettings.email,companySettings.website].filter(Boolean).join(' · ')}</p>}</div></div><div className="heading"><div><p className="eyebrow">INVOICE DETAILS</p><h2>{selectedSale.invoice_no}</h2></div><button onClick={() => setSelectedSale(null)}>Close</button><button className="primary" onClick={() => window.print()}>Print</button></div><p>{new Date(selectedSale.created_at).toLocaleString()} · {selectedSale.payment_method}</p><div className="tablewrap"><table><thead><tr><th>PRODUCT</th><th>SIZE / COLOUR</th><th>QTY</th><th>UNIT PRICE</th><th>LINE TOTAL</th></tr></thead><tbody>{(selectedSale.sale_items || []).map((i:any)=><tr key={i.id}><td>{i.product_name}<small>{i.product_no} · {i.sku}</small></td><td>{i.size} / {i.colour}</td><td>{i.quantity}</td><td>{money(Number(i.unit_price))}</td><td>{money(Number(i.line_total))}</td></tr>)}</tbody></table></div><p>Subtotal: {money(Number(selectedSale.subtotal))} · Discount: {money(Number(selectedSale.discount))} · <b>Total: {money(Number(selectedSale.total))}</b></p><p>Received: {money(Number(selectedSale.amount_received))} · Change: {money(Number(selectedSale.change_amount))}</p>{companySettings.invoice_note&&<p className="invoice-footer-note">{companySettings.invoice_note}</p>}<p className="invoice-footer-note">{companySettings.receipt_footer}</p></div>}
         </> : page === 'Expenses' ? <>
           <div className="heading"><div><p className="eyebrow">CASH OUTFLOWS</p><h1>Expenses Management</h1><p>Record shop expenses, supplier payments and staff payments.</p></div><button onClick={() => void loadExpenses()}>Refresh</button></div>
           <div className="expense-summary">
@@ -1334,7 +1402,7 @@ export default function App() {
               <form onSubmit={completeSale} className="checkout-form"><label>Customer<select value={selectedCustomer} onChange={e => setSelectedCustomer(e.target.value)}><option value="">Walk-in customer</option>{customers.map(c => <option key={c.id} value={c.id}>{c.full_name}{c.phone ? ` · ${c.phone}` : ''}</option>)}</select></label><label>Payment method<select value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)}><option>Cash</option><option>Card</option><option>Bank Transfer</option><option>Credit</option></select></label>{paymentMethod==='Credit' && <label>Initial payment method<select value={creditPaymentMethod} onChange={e=>setCreditPaymentMethod(e.target.value)}><option>Cash</option><option>Card</option><option>Bank Transfer</option><option>Cheque</option></select></label>}<label>Amount received (LKR)<input required type="number" min={paymentMethod==='Credit'?0:cartTotal} max={paymentMethod==='Credit'?Math.max(0,cartTotal-0.01):undefined} step="0.01" value={amountReceived} onChange={e => setAmountReceived(e.target.value)} placeholder={paymentMethod==='Credit'?'0':String(cartTotal)} /></label>{paymentMethod==='Credit' ? <p className="change-due">Outstanding: <b>{money(Math.max(0,cartTotal-(Number(amountReceived)||0)))}</b></p> : <p className="change-due">Change: <b>{money(Math.max(0,(Number(amountReceived)||0)-cartTotal))}</b></p>}<button className="primary full" disabled={busy || cart.length===0}>{busy ? 'Processing…' : 'Complete Sale'}</button></form>
             </article>
           </div>
-          {lastInvoice && <div className="invoice-preview"><div className="heading"><div><p className="eyebrow">SALE COMPLETED</p><h2>Invoice {lastInvoice.invoice_no}</h2></div><button className="primary" onClick={() => window.print()}>Print invoice</button></div><p>{new Date(lastInvoice.created_at).toLocaleString()}</p><div className="tablewrap"><table><thead><tr><th>ITEM</th><th>SIZE / COLOUR</th><th>QTY</th><th>PRICE</th><th>AMOUNT</th></tr></thead><tbody>{lastInvoice.items.map((line,i)=><tr key={i}><td>{line.name}<small>{line.product_no}</small></td><td>{line.size} / {line.colour}</td><td>{line.quantity}</td><td>{money(line.unit_price)}</td><td>{money(line.unit_price*line.quantity)}</td></tr>)}</tbody></table></div><p>Subtotal: {money(lastInvoice.subtotal)} · Discount: {money(lastInvoice.discount)} · <b>Total: {money(lastInvoice.total)}</b></p><p>{lastInvoice.payment_method==='Credit' ? <>Credit sale · Initial payment {money(lastInvoice.amount_received)} · <b>Outstanding {money(lastInvoice.total-lastInvoice.amount_received)}</b></> : <>Paid by {lastInvoice.payment_method} · Received {money(lastInvoice.amount_received)} · Change {money(lastInvoice.change_amount)}</>}</p></div>}
+          {lastInvoice && <div className="invoice-preview"><div className="invoice-company"><div className="invoice-company-logo">{companySettings.logo_data_url?<img src={companySettings.logo_data_url} alt="Company logo"/>:<span>◈</span>}</div><div><h2>{companySettings.company_name}</h2>{companySettings.tagline&&<p>{companySettings.tagline}</p>}{companySettings.address&&<p>{companySettings.address}</p>}{[companySettings.phone,companySettings.email,companySettings.website].filter(Boolean).join(' · ')&&<p>{[companySettings.phone,companySettings.email,companySettings.website].filter(Boolean).join(' · ')}</p>}</div></div><div className="heading"><div><p className="eyebrow">SALE COMPLETED</p><h2>Invoice {lastInvoice.invoice_no}</h2></div><button className="primary" onClick={() => window.print()}>Print invoice</button></div><p>{new Date(lastInvoice.created_at).toLocaleString()}</p><div className="tablewrap"><table><thead><tr><th>ITEM</th><th>SIZE / COLOUR</th><th>QTY</th><th>PRICE</th><th>AMOUNT</th></tr></thead><tbody>{lastInvoice.items.map((line,i)=><tr key={i}><td>{line.name}<small>{line.product_no}</small></td><td>{line.size} / {line.colour}</td><td>{line.quantity}</td><td>{money(line.unit_price)}</td><td>{money(line.unit_price*line.quantity)}</td></tr>)}</tbody></table></div><p>Subtotal: {money(lastInvoice.subtotal)} · Discount: {money(lastInvoice.discount)} · <b>Total: {money(lastInvoice.total)}</b></p><p>{lastInvoice.payment_method==='Credit' ? <>Credit sale · Initial payment {money(lastInvoice.amount_received)} · <b>Outstanding {money(lastInvoice.total-lastInvoice.amount_received)}</b></> : <>Paid by {lastInvoice.payment_method} · Received {money(lastInvoice.amount_received)} · Change {money(lastInvoice.change_amount)}</>}</p>{companySettings.invoice_note&&<p className="invoice-footer-note">{companySettings.invoice_note}</p>}<p className="invoice-footer-note">{companySettings.receipt_footer}</p></div>}
         </> : page === 'Customers' ? <>
           <div className="heading"><div><p className="eyebrow">CUSTOMER DIRECTORY</p><h1>Customers</h1><p>Save customer contact details and see their purchase totals.</p></div></div>
           <div className="customer-layout">
@@ -1368,10 +1436,40 @@ export default function App() {
           <article><h3>Create purchase request</h3><form onSubmit={createPurchaseRequest} className="customer-form"><label>Supplier<select required value={purchaseRequestForm.supplier_id} onChange={e=>setPurchaseRequestForm({...purchaseRequestForm,supplier_id:e.target.value})}><option value="">Select supplier</option>{suppliers.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select></label><label>Product / variant<select required value={purchaseRequestForm.variant_id} onChange={e=>setPurchaseRequestForm({...purchaseRequestForm,variant_id:e.target.value})}><option value="">Select variant</option>{posVariants.map(x=><option key={x.id} value={x.id}>{x.product_no} · {x.product_name} · {x.size}/{x.colour}</option>)}</select></label><label>Quantity<input type="number" min="1" required value={purchaseRequestForm.quantity} onChange={e=>setPurchaseRequestForm({...purchaseRequestForm,quantity:e.target.value})}/></label><label>Estimated unit cost (LKR)<input type="number" min="0" step="0.01" required value={purchaseRequestForm.unit_cost} onChange={e=>setPurchaseRequestForm({...purchaseRequestForm,unit_cost:e.target.value})}/></label><label>Notes<input value={purchaseRequestForm.notes} onChange={e=>setPurchaseRequestForm({...purchaseRequestForm,notes:e.target.value})}/></label><button className="primary" disabled={busy}>Submit purchase request</button></form></article>
           <article><h3>Purchase requests</h3><div className="tablewrap"><table><thead><tr><th>REQUEST</th><th>SUPPLIER</th><th>ITEMS</th><th>STATUS</th><th>CREATED</th><th>ACTION</th></tr></thead><tbody>{purchaseRequests.map(x=><tr key={x.id}><td><b>{x.request_no}</b></td><td>{x.suppliers?.name||'—'}</td><td>{(x.purchase_request_items||[]).map((i:any)=>`${i.quantity} × ${i.product_variants?.products?.name||'Product'} ${i.product_variants?.size||''}/${i.product_variants?.colour||''}`).join(', ')}</td><td>{x.status}</td><td>{new Date(x.created_at).toLocaleDateString()}</td><td>{x.status==='Submitted'?<button className="small-action" disabled={busy} onClick={()=>void approvePurchaseRequest(x.id)}>Approve</button>:x.status==='Approved'?'Ready to receive':'—'}</td></tr>)}{!purchaseRequests.length&&<tr><td colSpan={6}>No purchase requests recorded.</td></tr>}</tbody></table></div></article>
         </> : page === 'Settings' ? <>
-          <div className="heading"><div><p className="eyebrow">SYSTEM ADMINISTRATION</p><h1>Settings & Data Backup</h1><p>Export operational data for secure offline retention.</p></div></div>
-          <article><h3>Database data export</h3><p className="muted">Downloads up to 10,000 rows per operational table in a JSON file. This is a data export, not a full Supabase point-in-time backup; it does not include authentication credentials, database schema, storage files or project settings.</p><button className="primary" disabled={busy || !['Admin'].includes(currentEmployeeRole||'')} onClick={()=>void exportDataBackup()}>{busy?'Preparing export…':'Download data backup (JSON)'}</button>{currentEmployeeRole!=='Admin'&&<p className="muted">Only Admin users can export the database data.</p>}</article>
-          <article><h3>Inventory tools</h3><p className="muted">Download product, size, colour, barcode and stock information for spreadsheet review.</p><button onClick={exportInventoryCSV}>Export inventory CSV</button></article>
-          <article><h3>Security reminder</h3><p className="muted">Keep downloaded backups in an access-controlled location. They may contain customer contact details, employee records and sales information.</p></article>
+          <div className="heading"><div><p className="eyebrow">BUSINESS CONFIGURATION</p><h1>Company Settings</h1><p>Set up your shop identity, contact details and printed receipts before going live.</p></div><span className="ok">Admin settings</span></div>
+          <form className="company-settings-form" onSubmit={saveCompanySettings}>
+            <article className="company-brand-card">
+              <div className="company-logo-preview">
+                {companySettings.logo_data_url ? <img src={companySettings.logo_data_url} alt="Company logo preview"/> : <div className="company-logo-placeholder">◈</div>}
+              </div>
+              <div className="company-brand-copy">
+                <h3>Company branding</h3>
+                <p className="muted">Upload a clear PNG, JPG or WebP logo (maximum 1 MB). It will appear in the ERP and on printed invoices.</p>
+                <div className="logo-actions"><label className="logo-upload">Choose logo<input type="file" accept="image/png,image/jpeg,image/webp" onChange={handleCompanyLogo}/></label>{companySettings.logo_data_url&&<button type="button" className="secondary-action" onClick={()=>setCompanySettings((current:any)=>({...current,logo_data_url:''}))}>Remove logo</button>}</div>
+              </div>
+            </article>
+            <article>
+              <div className="settings-section-heading"><div><h3>Business information</h3><p className="muted">These details are used in the workspace and customer receipts.</p></div><span className="settings-step">01</span></div>
+              <div className="company-settings-grid">
+                <label>Company / shop name<input required maxLength={120} value={companySettings.company_name} onChange={e=>setCompanySettings((v:any)=>({...v,company_name:e.target.value}))} placeholder="Your company name"/></label>
+                <label>Tagline<input maxLength={120} value={companySettings.tagline} onChange={e=>setCompanySettings((v:any)=>({...v,tagline:e.target.value}))} placeholder="Clothing & Retail"/></label>
+                <label>Contact phone<input maxLength={40} value={companySettings.phone} onChange={e=>setCompanySettings((v:any)=>({...v,phone:e.target.value}))} placeholder="+94 7X XXX XXXX"/></label>
+                <label>Business email<input type="email" maxLength={160} value={companySettings.email} onChange={e=>setCompanySettings((v:any)=>({...v,email:e.target.value}))} placeholder="hello@yourcompany.lk"/></label>
+                <label className="settings-wide">Business address<textarea rows={3} maxLength={500} value={companySettings.address} onChange={e=>setCompanySettings((v:any)=>({...v,address:e.target.value}))} placeholder="Street, town, district"/></label>
+                <label className="settings-wide">Website<input maxLength={180} value={companySettings.website} onChange={e=>setCompanySettings((v:any)=>({...v,website:e.target.value}))} placeholder="www.yourcompany.lk"/></label>
+              </div>
+            </article>
+            <article>
+              <div className="settings-section-heading"><div><h3>Invoice & receipt settings</h3><p className="muted">Configure the message shown at the bottom of printed invoices.</p></div><span className="settings-step">02</span></div>
+              <div className="company-settings-grid">
+                <label>Business currency<select value="LKR" disabled><option value="LKR">Sri Lankan Rupee (LKR)</option></select><small>Currency is currently configured as LKR across POS and Accounting.</small></label>
+                <label>Receipt footer<input maxLength={180} value={companySettings.receipt_footer} onChange={e=>setCompanySettings((v:any)=>({...v,receipt_footer:e.target.value}))} placeholder="Thank you for shopping with us!"/></label>
+                <label className="settings-wide">Additional invoice note<textarea rows={2} maxLength={300} value={companySettings.invoice_note} onChange={e=>setCompanySettings((v:any)=>({...v,invoice_note:e.target.value}))} placeholder="Optional return policy or customer message"/></label>
+              </div>
+            </article>
+            <div className="settings-save-row"><p className="muted">Changes are saved securely to your Supabase database.</p><button className="primary" disabled={busy}>{busy?'Saving settings…':'Save company settings'}</button></div>
+          </form>
+          <article className="settings-backup-card"><div><h3>Database backup & inventory export</h3><p className="muted">Download a JSON copy of operational, accounting and company settings data. This does not include login passwords, database schema or Supabase Storage files.</p></div><div className="logo-actions"><button className="primary" disabled={busy || currentEmployeeRole!=='Admin'} onClick={()=>void exportDataBackup()}>{busy?'Preparing…':'Download data backup (JSON)'}</button><button className="secondary-action" onClick={exportInventoryCSV}>Export inventory CSV</button></div></article>
         </> : <article className="empty"><h2>{page}</h2><p>This module is planned for a later development phase.</p></article>}
       </section>
     </main>
