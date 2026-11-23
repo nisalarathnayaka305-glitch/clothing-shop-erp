@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
 import type { User } from '@supabase/supabase-js'
 import { supabase } from './lib/supabase'
-import { BookOpen, Calculator, FileText, LayoutDashboard, ListTree, PackageSearch, PanelLeftClose, PanelLeftOpen, RefreshCw, Scale, Store, TrendingUp, Wallet } from 'lucide-react'
+import { BookOpen, Calculator, LogOut, FileText, LayoutDashboard, ListTree, PackageSearch, PanelLeftClose, PanelLeftOpen, RefreshCw, Scale, Store, TrendingUp, Wallet } from 'lucide-react'
 
 type AccountType = 'Asset' | 'Liability' | 'Equity' | 'Revenue' | 'Contra Revenue' | 'Cost of Sales' | 'Expense' | 'Other Income' | 'Other Expense'
 type Account = {
@@ -350,7 +350,7 @@ function App() {
       <aside className="sidebar">
         <div className="brand"><div className="brand-mark"><Store size={18}/></div><div className="brand-copy"><strong>{companySettings.company_name || 'Clothing Shop'}</strong><small>{companySettings.tagline || 'ACCOUNTING'}</small></div></div>
         {['WORKSPACE','REPORTS','ACCOUNTING'].map(group=><div className="nav-group" key={group}><p>{group}</p>{nav.filter(item=>item.group===group).map(item=>{const Icon=accountingIcons[item.id];return <button key={item.id} className={tab===item.id?'nav-item active':'nav-item'} onClick={()=>setTab(item.id)} title={sidebarCollapsed ? item.label : undefined}><Icon className="nav-icon" size={17} strokeWidth={2}/><span className="nav-label">{item.label}</span></button>})}</div>)}
-        <div className="sidebar-bottom"><span className="status-dot"/> <span className="sidebar-status-label">Supabase connected</span><small>{role}</small><button onClick={handleSignOut}>Sign out</button></div>
+        <div className="sidebar-bottom"><span className="status-dot"/> <span className="sidebar-status-label">Supabase connected</span><small>{role}</small><button onClick={handleSignOut}><LogOut size={15}/><span className="sidebar-logout-label">Sign out</span></button></div>
       </aside>
 
       <main className="main-area">
