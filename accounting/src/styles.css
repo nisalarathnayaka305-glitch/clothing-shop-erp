@@ -85,6 +85,7 @@ input:focus,select:focus{outline:2px solid #c6e1ff;border-color:#6ca9e6}
 .statement-total.strong{background:#f5f9fd;border-radius:7px;border:0;margin-top:10px;padding:15px;font-size:14px}
 .statement-section{margin-top:24px}
 .statement-section h3{font-size:12px;letter-spacing:1px;margin-bottom:8px;color:#47718f}
+.inventory-warning{display:flex;flex-direction:column;gap:6px;padding:15px 18px;border:1px solid #f0dfb8;background:#fffaf0;border-radius:10px;color:#815d20;font-size:12px;line-height:1.55}.inventory-warning span{color:#927b55;font-size:11px}
 .balance-status{margin-top:20px;border-radius:8px;padding:12px;font-size:12px;font-weight:700}
 .balance-status.ok{background:#ecfaf3;color:#23835b}
 .balance-status.warning{background:#fff5e9;color:#a66b16}
