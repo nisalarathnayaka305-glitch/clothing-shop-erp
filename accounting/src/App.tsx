@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
 import type { User } from '@supabase/supabase-js'
 import { supabase } from './lib/supabase'
+import { BookOpen, Calculator, FileText, LayoutDashboard, ListTree, PackageSearch, PanelLeftClose, PanelLeftOpen, RefreshCw, Scale, Store, TrendingUp, Wallet } from 'lucide-react'
 
 type AccountType = 'Asset' | 'Liability' | 'Equity' | 'Revenue' | 'Contra Revenue' | 'Cost of Sales' | 'Expense' | 'Other Income' | 'Other Expense'
 type Account = {
@@ -43,7 +44,7 @@ const money = (value: number) => new Intl.NumberFormat('en-LK', { style: 'curren
 const amount = (value: unknown) => Number(value || 0)
 const accountTypes: AccountType[] = ['Asset','Liability','Equity','Revenue','Contra Revenue','Cost of Sales','Expense','Other Income','Other Expense']
 const defaultNormalBalance = (type: AccountType) => ['Asset','Contra Revenue','Cost of Sales','Expense','Other Expense'].includes(type) ? 'debit' : 'credit'
-const WENODO_LOGO = '/clothing-shop-erp/wenodo-logo.svg'
+const accountingIcons = { overview: LayoutDashboard, profit: TrendingUp, balance: Scale, trial: Calculator, inventory: PackageSearch, journals: FileText, opening: Wallet, accounts: ListTree }
 const nav: { id: Tab; label: string; group: string }[] = [
   { id: 'overview', label: 'Overview', group: 'WORKSPACE' },
   { id: 'profit', label: 'Profit & Loss', group: 'REPORTS' },
@@ -69,8 +70,9 @@ function downloadCsv(filename: string, rows: (string | number)[][]) {
 function App() {
   const [user, setUser] = useState<User | null>(null)
   const [role, setRole] = useState<string | null>(null)
-  const [companySettings, setCompanySettings] = useState({ company_name: 'Wenodo', tagline: 'CLOTHING RETAIL MANAGEMENT', logo_data_url: WENODO_LOGO })
+  const [companySettings, setCompanySettings] = useState({ company_name: 'Clothing Shop', tagline: 'ACCOUNTING', logo_data_url: '' })
   const [tab, setTab] = useState<Tab>('overview')
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [accounts, setAccounts] = useState<Account[]>([])
   const [entries, setEntries] = useState<Entry[]>([])
   const [periods, setPeriods] = useState<Period[]>([])
@@ -326,8 +328,8 @@ function App() {
   if (!user) return (
     <main className="login-shell">
       <section className="login-card">
-        <div className="login-logo"><img src={WENODO_LOGO} alt="Wenodo"/></div>
-        <p className="eyebrow">WENODO · FINANCE</p>
+        <div className="login-brand-mark"><BookOpen size={25}/></div>
+        <p className="eyebrow">CLOTHING SHOP · FINANCE</p>
         <h1>Accounting Workspace</h1>
         <p className="muted">Secure double-entry accounting and financial statements.</p>
         <form onSubmit={handleLogin} className="login-form">
@@ -344,15 +346,15 @@ function App() {
   if (!['Admin','Manager'].includes(role || '')) return <main className="login-shell"><section className="login-card"><h1>Access restricted</h1><p>{error || 'Admin or Manager access is required.'}</p><button className="secondary-button" onClick={handleSignOut}>Sign out</button></section></main>
 
   return (
-    <div className="app-shell">
+    <div className={sidebarCollapsed ? "app-shell sidebar-collapsed" : "app-shell"}>
       <aside className="sidebar">
-        <div className="brand"><img src={companySettings.logo_data_url || WENODO_LOGO} alt="Wenodo logo"/></div>
-        {['WORKSPACE','REPORTS','ACCOUNTING'].map(group=><div className="nav-group" key={group}><p>{group}</p>{nav.filter(item=>item.group===group).map(item=><button key={item.id} className={tab===item.id?'nav-item active':'nav-item'} onClick={()=>setTab(item.id)}><span className="nav-dot"/>{item.label}</button>)}</div>)}
-        <div className="sidebar-bottom"><span className="status-dot"/> Supabase connected <small>{role}</small><button onClick={handleSignOut}>Sign out</button></div>
+        <div className="brand"><div className="brand-mark"><Store size={18}/></div><div className="brand-copy"><strong>{companySettings.company_name || 'Clothing Shop'}</strong><small>{companySettings.tagline || 'ACCOUNTING'}</small></div></div>
+        {['WORKSPACE','REPORTS','ACCOUNTING'].map(group=><div className="nav-group" key={group}><p>{group}</p>{nav.filter(item=>item.group===group).map(item=>{const Icon=accountingIcons[item.id];return <button key={item.id} className={tab===item.id?'nav-item active':'nav-item'} onClick={()=>setTab(item.id)} title={sidebarCollapsed ? item.label : undefined}><Icon className="nav-icon" size={17} strokeWidth={2}/><span className="nav-label">{item.label}</span></button>})}</div>)}
+        <div className="sidebar-bottom"><span className="status-dot"/> <span className="sidebar-status-label">Supabase connected</span><small>{role}</small><button onClick={handleSignOut}>Sign out</button></div>
       </aside>
 
       <main className="main-area">
-        <header className="topbar"><div><span>Workspace</span><b>/</b><strong>{nav.find(item=>item.id===tab)?.label}</strong></div><div className="top-actions"><span className="user-chip">{user.email}</span><button className="icon-button" onClick={()=>void loadData()} title="Refresh data">↻</button></div></header>
+        <header className="topbar"><div className="topbar-left"><button className="sidebar-toggle" onClick={()=>setSidebarCollapsed(value=>!value)} aria-label={sidebarCollapsed ? 'Show sidebar' : 'Hide sidebar'} title={sidebarCollapsed ? 'Show sidebar' : 'Hide sidebar'}>{sidebarCollapsed ? <PanelLeftOpen size={18}/> : <PanelLeftClose size={18}/>}</button><div className="breadcrumbs"><span>Workspace</span><b>/</b><strong>{nav.find(item=>item.id===tab)?.label}</strong></div></div><div className="top-actions"><span className="user-chip">{user.email}</span><button className="icon-button refresh-button" onClick={()=>void loadData()} title="Refresh data" aria-label="Refresh data"><RefreshCw size={16}/></button></div></header>
         <div className="page-content">
           <div className="page-heading"><div><p className="eyebrow">FINANCIAL MANAGEMENT</p><h1>{nav.find(item=>item.id===tab)?.label}</h1><p className="muted">Double-entry accounting · Sri Lankan Rupees (LKR)</p></div>{tab==='journals'&&<button className="primary-button" onClick={()=>openNewJournal('manual')}>+ New journal</button>}{tab==='opening'&&<button className="primary-button" onClick={()=>openNewJournal('opening_balance')}>+ Enter opening balances</button>}</div>
           {notice&&<div className="success-banner">{notice}<button onClick={()=>setNotice('')}>×</button></div>}
