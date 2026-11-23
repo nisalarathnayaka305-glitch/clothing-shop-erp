@@ -8,14 +8,17 @@
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "build:accounting": "tsc -p accounting/tsconfig.json && vite build --config accounting/vite.config.ts",
-    "build:all": "npm run build && npm run build:accounting"
+    "build:all": "npm run build && npm run build:accounting && npm run build:leave",
+    "build:leave": "tsc -p leave/tsconfig.json && vite build --config leave/vite.config.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.1",
     "lucide-react": "^0.468.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "recharts": "^2.15.0"
+    "recharts": "^2.15.0",
+    "html5-qrcode": "2.3.8",
+    "qrcode.react": "4.2.0"
   },
   "devDependencies": {
     "@types/react": "^18.3.18",
