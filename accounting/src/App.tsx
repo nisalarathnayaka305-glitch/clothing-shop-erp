@@ -71,10 +71,11 @@ function downloadCsv(filename: string, rows: (string | number)[][]) {
 function App() {
   const [user, setUser] = useState<User | null>(null)
   const [role, setRole] = useState<string | null>(null)
-  const [companySettings, setCompanySettings] = useState({ company_name: 'Clothing Shop', tagline: 'ACCOUNTING', logo_data_url: '' })
+  const [companySettings, setCompanySettings] = useState({ company_name: 'Clothing Shop', tagline: 'ACCOUNTING', logo_data_url: '', theme_mode: 'light' })
   const [tab, setTab] = useState<Tab>('overview')
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => { try { return window.localStorage.getItem('clothing-erp-sidebar-hidden') === 'true' } catch { return false } })
-  useEffect(() => { try { window.localStorage.setItem('clothing-erp-accounting-sidebar-hidden', String(sidebarCollapsed)) } catch {} }, [sidebarCollapsed])
+  useEffect(() => { try { window.localStorage.setItem('clothing-erp-sidebar-hidden', String(sidebarCollapsed)) } catch {} }, [sidebarCollapsed])
+  useEffect(() => { document.documentElement.dataset.theme = companySettings.theme_mode || 'light' }, [companySettings.theme_mode])
   const [accounts, setAccounts] = useState<Account[]>([])
   const [entries, setEntries] = useState<Entry[]>([])
   const [periods, setPeriods] = useState<Period[]>([])
@@ -121,7 +122,7 @@ function App() {
       supabase.from('products').select('id,product_no,sku,name,category,cost_price,active').order('product_no'),
       supabase.from('product_variants').select('id,product_id,size,colour'),
       supabase.from('stock_balances').select('variant_id,quantity,reorder_level'),
-      supabase.from('company_settings').select('company_name,tagline,logo_data_url').eq('id', true).maybeSingle(),
+      supabase.from('company_settings').select('company_name,tagline,logo_data_url,theme_mode').eq('id', true).maybeSingle(),
     ])
     if (accountResult.error) setError(accountResult.error.message)
     else setAccounts((accountResult.data || []) as Account[])
