@@ -29,7 +29,7 @@ jobs:
       - name: Install dependencies
         run: npm install
       - name: Build application
-        run: npm run build
+        run: npm run build:all
         env:
           VITE_SUPABASE_URL: https://utlkxuqdxjwggibzssfe.supabase.co
           VITE_SUPABASE_PUBLISHABLE_KEY: sb_publishable_rGwzdmWOWTvygJHk2uC1pA_FsuhdgEg
