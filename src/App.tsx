@@ -30,7 +30,7 @@ const moduleIcons: Record<string, LucideIcon> = {
   'Payroll': Banknote, 'Settings': Settings,
 }
 const defaultCompanySettings = {
-  id: true, company_name: 'Your Clothing Store', tagline: 'Clothing & Retail',
+  id: true, company_name: 'Your Clothing Store', tagline: 'Clothing & Retail', theme_mode: 'light',
   phone: '', email: '', address: '', website: '', logo_data_url: '',
   currency_code: 'LKR', receipt_footer: 'Thank you for shopping with us!', invoice_note: ''
 }
@@ -60,7 +60,7 @@ function PhoneBarcodeScanner({sessionId,allowed}:{sessionId:string;allowed:boole
     return()=>{setScanChannel(null);void supabase.removeChannel(channel)}
   },[sessionId,allowed])
   useEffect(()=>{
-    if(!scanning||!allowed)return
+    if(!scanning||!allowed||!scanChannel)return
     const reader=new Html5Qrcode('phone-pos-camera')
     let active=true
     void reader.start({facingMode:'environment'},{fps:12,qrbox:{width:260,height:170},aspectRatio:1.6},async(code)=>{
