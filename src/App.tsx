@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent, type ChangeEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { supabase, supabaseConfigured, money, type Product, type ProductVariant } from './lib'
 import { Activity, Banknote, BarChart3, BookOpen, CalendarCheck, CircleHelp, ClipboardList, CreditCard, Gift, LayoutDashboard, Package, PanelLeftClose, PanelLeftOpen, Receipt, RefreshCw, Repeat, Settings, ShoppingBag, ShoppingCart, Store, Truck, UserCog, Users, Wallet } from 'lucide-react'
@@ -44,7 +44,8 @@ export default function App() {
   const [products, setProducts] = useState<Product[]>(demo)
   const [variants, setVariants] = useState<ProductVariant[]>(demoVariants)
   const [page, setPage] = useState('Overview')
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => { try { return window.localStorage.getItem('clothing-erp-sidebar-hidden') === 'true' } catch { return false } })
+  useEffect(() => { try { window.localStorage.setItem('clothing-erp-sidebar-hidden', String(sidebarCollapsed)) } catch {} }, [sidebarCollapsed])
   const [query, setQuery] = useState('')
   const [show, setShow] = useState(false)
   const [notice, setNotice] = useState('')
@@ -151,25 +152,7 @@ export default function App() {
     if (!supabase || !session) return
     const { data, error } = await supabase.from('company_settings').select('*').eq('id', true).maybeSingle()
     if (error) setNotice(error.message)
-    else if (data) setCompanySettings(data)
-  }
-
-  function handleCompanyLogo(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0]
-    if (!file) return
-    if (!['image/png','image/jpeg','image/webp'].includes(file.type)) {
-      setNotice('Please upload a PNG, JPG or WebP logo.')
-      event.target.value = ''
-      return
-    }
-    if (file.size > 2 * 1024 * 1024) {
-      setNotice('Logo must be smaller than 2 MB.')
-      event.target.value = ''
-      return
-    }
-    const reader = new FileReader()
-    reader.onload = () => setCompanySettings((current:any) => ({ ...current, logo_data_url: String(reader.result || '') }))
-    reader.readAsDataURL(file)
+    else if (data) setCompanySettings({ ...data, logo_data_url: '' })
   }
 
   async function saveCompanySettings(event: FormEvent) {
@@ -1090,7 +1073,7 @@ export default function App() {
     <button className="primary full" disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</button><p className="muted hint">User accounts are managed securely in Supabase.</p>
   </form></div>
 
-  return <div className={sidebarCollapsed ? 'shell sidebar-collapsed' : 'shell'}>
+  return <div className={sidebarCollapsed ? 'shell sidebar-hidden' : 'shell'}>
     <aside><div className="retail-brand"><div className="retail-brand-mark"><Store size={19}/></div><div className="brand-copy"><h2>{companySettings.company_name || 'Clothing ERP'}</h2><small>{companySettings.tagline || 'RETAIL MANAGEMENT'}</small></div></div>{(supabaseConfigured && session ? (currentEmployeeRole === 'Admin' ? navigation : currentEmployeeRole === 'Manager' ? navigation.filter(item=>item!=='Settings') : currentEmployeeRole === 'Cashier' ? ['Overview','Point of Sale','Sales History','Customers','Customer Accounts','Attendance'] : currentEmployeeRole === 'Staff' ? ['Overview','Products & Stock','Attendance'] : ['Overview','Employees']) : navigation).map(item => { const Icon = moduleIcons[item] || CircleHelp; return <button key={item} className={page === item ? 'active' : ''} onClick={() => setPage(item)} title={sidebarCollapsed ? item : undefined}><Icon size={17} strokeWidth={2}/><span className="nav-label">{item}</span></button> })}{supabaseConfigured && session && ['Admin','Manager'].includes(currentEmployeeRole || '') && <a className="accounting-nav-link" href="/clothing-shop-erp/accounting/" target="_blank" rel="noreferrer"><BookOpen size={17} strokeWidth={2}/> <span className="nav-label">Accounting</span> <span className="accounting-nav-arrow">↗</span></a>}</aside>
     <main><header><div className="header-left"><button className="sidebar-toggle" onClick={()=>setSidebarCollapsed(value=>!value)} aria-label={sidebarCollapsed ? 'Show sidebar' : 'Hide sidebar'} title={sidebarCollapsed ? 'Show sidebar' : 'Hide sidebar'}>{sidebarCollapsed ? <PanelLeftOpen size={18}/> : <PanelLeftClose size={18}/>}</button><b>Workspace / {page}</b></div><div className="header-actions"><span className={supabaseConfigured ? 'ok' : 'demo'}>{supabaseConfigured ? 'Supabase connected' : 'Demo mode'}</span><button className="icon-button refresh-button" onClick={()=>window.location.reload()} aria-label="Refresh workspace" title="Refresh workspace"><RefreshCw size={16}/></button>{session && <button className="text-button" onClick={() => void signOut()}>Sign out</button>}</div></header>
       <section>
@@ -1257,7 +1240,7 @@ export default function App() {
               {sales.length === 0 && <tr><td colSpan={7}>No sales recorded yet.</td></tr>}
             </tbody></table></div>
           </article>
-          {selectedSale && <div className="invoice-preview"><div className="invoice-company"><div className="invoice-company-logo">{companySettings.logo_data_url ? <img src={companySettings.logo_data_url} alt="Company logo"/> : <Store size={20}/>}</div><div><h2>{companySettings.company_name}</h2>{companySettings.tagline&&<p>{companySettings.tagline}</p>}{companySettings.address&&<p>{companySettings.address}</p>}{[companySettings.phone,companySettings.email,companySettings.website].filter(Boolean).join(' · ')&&<p>{[companySettings.phone,companySettings.email,companySettings.website].filter(Boolean).join(' · ')}</p>}</div></div><div className="heading"><div><p className="eyebrow">INVOICE DETAILS</p><h2>{selectedSale.invoice_no}</h2></div><button onClick={() => setSelectedSale(null)}>Close</button><button className="primary" onClick={() => window.print()}>Print</button></div><p>{new Date(selectedSale.created_at).toLocaleString()} · {selectedSale.payment_method}</p><div className="tablewrap"><table><thead><tr><th>PRODUCT</th><th>SIZE / COLOUR</th><th>QTY</th><th>UNIT PRICE</th><th>LINE TOTAL</th></tr></thead><tbody>{(selectedSale.sale_items || []).map((i:any)=><tr key={i.id}><td>{i.product_name}<small>{i.product_no} · {i.sku}</small></td><td>{i.size} / {i.colour}</td><td>{i.quantity}</td><td>{money(Number(i.unit_price))}</td><td>{money(Number(i.line_total))}</td></tr>)}</tbody></table></div><p>Subtotal: {money(Number(selectedSale.subtotal))} · Discount: {money(Number(selectedSale.discount))} · <b>Total: {money(Number(selectedSale.total))}</b></p><p>Received: {money(Number(selectedSale.amount_received))} · Change: {money(Number(selectedSale.change_amount))}</p>{companySettings.invoice_note&&<p className="invoice-footer-note">{companySettings.invoice_note}</p>}<p className="invoice-footer-note">{companySettings.receipt_footer}</p></div>}
+          {selectedSale && <div className="invoice-preview"><div className="invoice-company"><div className="invoice-company-logo"><Store size={20}/></div><div><h2>{companySettings.company_name}</h2>{companySettings.tagline&&<p>{companySettings.tagline}</p>}{companySettings.address&&<p>{companySettings.address}</p>}{[companySettings.phone,companySettings.email,companySettings.website].filter(Boolean).join(' · ')&&<p>{[companySettings.phone,companySettings.email,companySettings.website].filter(Boolean).join(' · ')}</p>}</div></div><div className="heading"><div><p className="eyebrow">INVOICE DETAILS</p><h2>{selectedSale.invoice_no}</h2></div><button onClick={() => setSelectedSale(null)}>Close</button><button className="primary" onClick={() => window.print()}>Print</button></div><p>{new Date(selectedSale.created_at).toLocaleString()} · {selectedSale.payment_method}</p><div className="tablewrap"><table><thead><tr><th>PRODUCT</th><th>SIZE / COLOUR</th><th>QTY</th><th>UNIT PRICE</th><th>LINE TOTAL</th></tr></thead><tbody>{(selectedSale.sale_items || []).map((i:any)=><tr key={i.id}><td>{i.product_name}<small>{i.product_no} · {i.sku}</small></td><td>{i.size} / {i.colour}</td><td>{i.quantity}</td><td>{money(Number(i.unit_price))}</td><td>{money(Number(i.line_total))}</td></tr>)}</tbody></table></div><p>Subtotal: {money(Number(selectedSale.subtotal))} · Discount: {money(Number(selectedSale.discount))} · <b>Total: {money(Number(selectedSale.total))}</b></p><p>Received: {money(Number(selectedSale.amount_received))} · Change: {money(Number(selectedSale.change_amount))}</p>{companySettings.invoice_note&&<p className="invoice-footer-note">{companySettings.invoice_note}</p>}<p className="invoice-footer-note">{companySettings.receipt_footer}</p></div>}
         </> : page === 'Expenses' ? <>
           <div className="heading"><div><p className="eyebrow">CASH OUTFLOWS</p><h1>Expenses Management</h1><p>Record shop expenses, supplier payments and staff payments.</p></div><button onClick={() => void loadExpenses()}>Refresh</button></div>
           <div className="expense-summary">
@@ -1414,7 +1397,7 @@ export default function App() {
               <form onSubmit={completeSale} className="checkout-form"><label>Customer<select value={selectedCustomer} onChange={e => setSelectedCustomer(e.target.value)}><option value="">Walk-in customer</option>{customers.map(c => <option key={c.id} value={c.id}>{c.full_name}{c.phone ? ` · ${c.phone}` : ''}</option>)}</select></label><label>Payment method<select value={paymentMethod} onChange={e => setPaymentMethod(e.target.value)}><option>Cash</option><option>Card</option><option>Bank Transfer</option><option>Credit</option></select></label>{paymentMethod==='Credit' && <label>Initial payment method<select value={creditPaymentMethod} onChange={e=>setCreditPaymentMethod(e.target.value)}><option>Cash</option><option>Card</option><option>Bank Transfer</option><option>Cheque</option></select></label>}<label>Amount received (LKR)<input required type="number" min={paymentMethod==='Credit'?0:cartTotal} max={paymentMethod==='Credit'?Math.max(0,cartTotal-0.01):undefined} step="0.01" value={amountReceived} onChange={e => setAmountReceived(e.target.value)} placeholder={paymentMethod==='Credit'?'0':String(cartTotal)} /></label>{paymentMethod==='Credit' ? <p className="change-due">Outstanding: <b>{money(Math.max(0,cartTotal-(Number(amountReceived)||0)))}</b></p> : <p className="change-due">Change: <b>{money(Math.max(0,(Number(amountReceived)||0)-cartTotal))}</b></p>}<button className="primary full" disabled={busy || cart.length===0}>{busy ? 'Processing…' : 'Complete Sale'}</button></form>
             </article>
           </div>
-          {lastInvoice && <div className="invoice-preview"><div className="invoice-company"><div className="invoice-company-logo">{companySettings.logo_data_url ? <img src={companySettings.logo_data_url} alt="Company logo"/> : <Store size={20}/>}</div><div><h2>{companySettings.company_name}</h2>{companySettings.tagline&&<p>{companySettings.tagline}</p>}{companySettings.address&&<p>{companySettings.address}</p>}{[companySettings.phone,companySettings.email,companySettings.website].filter(Boolean).join(' · ')&&<p>{[companySettings.phone,companySettings.email,companySettings.website].filter(Boolean).join(' · ')}</p>}</div></div><div className="heading"><div><p className="eyebrow">SALE COMPLETED</p><h2>Invoice {lastInvoice.invoice_no}</h2></div><button className="primary" onClick={() => window.print()}>Print invoice</button></div><p>{new Date(lastInvoice.created_at).toLocaleString()}</p><div className="tablewrap"><table><thead><tr><th>ITEM</th><th>SIZE / COLOUR</th><th>QTY</th><th>PRICE</th><th>AMOUNT</th></tr></thead><tbody>{lastInvoice.items.map((line,i)=><tr key={i}><td>{line.name}<small>{line.product_no}</small></td><td>{line.size} / {line.colour}</td><td>{line.quantity}</td><td>{money(line.unit_price)}</td><td>{money(line.unit_price*line.quantity)}</td></tr>)}</tbody></table></div><p>Subtotal: {money(lastInvoice.subtotal)} · Discount: {money(lastInvoice.discount)} · <b>Total: {money(lastInvoice.total)}</b></p><p>{lastInvoice.payment_method==='Credit' ? <>Credit sale · Initial payment {money(lastInvoice.amount_received)} · <b>Outstanding {money(lastInvoice.total-lastInvoice.amount_received)}</b></> : <>Paid by {lastInvoice.payment_method} · Received {money(lastInvoice.amount_received)} · Change {money(lastInvoice.change_amount)}</>}</p>{companySettings.invoice_note&&<p className="invoice-footer-note">{companySettings.invoice_note}</p>}<p className="invoice-footer-note">{companySettings.receipt_footer}</p></div>}
+          {lastInvoice && <div className="invoice-preview"><div className="invoice-company"><div className="invoice-company-logo"><Store size={20}/></div><div><h2>{companySettings.company_name}</h2>{companySettings.tagline&&<p>{companySettings.tagline}</p>}{companySettings.address&&<p>{companySettings.address}</p>}{[companySettings.phone,companySettings.email,companySettings.website].filter(Boolean).join(' · ')&&<p>{[companySettings.phone,companySettings.email,companySettings.website].filter(Boolean).join(' · ')}</p>}</div></div><div className="heading"><div><p className="eyebrow">SALE COMPLETED</p><h2>Invoice {lastInvoice.invoice_no}</h2></div><button className="primary" onClick={() => window.print()}>Print invoice</button></div><p>{new Date(lastInvoice.created_at).toLocaleString()}</p><div className="tablewrap"><table><thead><tr><th>ITEM</th><th>SIZE / COLOUR</th><th>QTY</th><th>PRICE</th><th>AMOUNT</th></tr></thead><tbody>{lastInvoice.items.map((line,i)=><tr key={i}><td>{line.name}<small>{line.product_no}</small></td><td>{line.size} / {line.colour}</td><td>{line.quantity}</td><td>{money(line.unit_price)}</td><td>{money(line.unit_price*line.quantity)}</td></tr>)}</tbody></table></div><p>Subtotal: {money(lastInvoice.subtotal)} · Discount: {money(lastInvoice.discount)} · <b>Total: {money(lastInvoice.total)}</b></p><p>{lastInvoice.payment_method==='Credit' ? <>Credit sale · Initial payment {money(lastInvoice.amount_received)} · <b>Outstanding {money(lastInvoice.total-lastInvoice.amount_received)}</b></> : <>Paid by {lastInvoice.payment_method} · Received {money(lastInvoice.amount_received)} · Change {money(lastInvoice.change_amount)}</>}</p>{companySettings.invoice_note&&<p className="invoice-footer-note">{companySettings.invoice_note}</p>}<p className="invoice-footer-note">{companySettings.receipt_footer}</p></div>}
         </> : page === 'Customers' ? <>
           <div className="heading"><div><p className="eyebrow">CUSTOMER DIRECTORY</p><h1>Customers</h1><p>Save customer contact details and see their purchase totals.</p></div></div>
           <div className="customer-layout">
@@ -1451,11 +1434,10 @@ export default function App() {
           <div className="heading"><div><p className="eyebrow">BUSINESS CONFIGURATION</p><h1>Company Settings</h1><p>Set up your shop identity, contact details and printed receipts before going live.</p></div><span className="ok">Admin settings</span></div>
           <form className="company-settings-form" onSubmit={saveCompanySettings}>
             <article className="company-brand-card">
-              <div className="company-logo-preview">{companySettings.logo_data_url ? <img src={companySettings.logo_data_url} alt="Company logo preview"/> : <div className="company-logo-placeholder"><Store size={25}/></div>}</div>
+              <div className="company-logo-preview"><div className="company-logo-placeholder"><Store size={25}/></div></div>
               <div className="company-brand-copy">
-                <h3>Company branding</h3>
-                <p className="muted">Upload a clear PNG, JPG or WebP logo (maximum 2 MB). It will appear in the ERP and on printed invoices.</p>
-                <div className="logo-actions"><label className="logo-upload">Choose logo<input type="file" accept="image/png,image/jpeg,image/webp" onChange={handleCompanyLogo}/></label>{companySettings.logo_data_url && <button type="button" className="secondary-action" onClick={()=>setCompanySettings((current:any)=>({...current,logo_data_url:''}))}>Remove logo</button>}</div>
+                <h3>Clothing Shop ERP branding</h3>
+                <p className="muted">A neutral store icon is used in the workspace. No third-party logo is displayed.</p>
               </div>
             </article>
             <article>

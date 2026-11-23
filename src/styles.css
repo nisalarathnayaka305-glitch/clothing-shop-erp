@@ -138,25 +138,25 @@ input:focus,select:focus,textarea:focus{outline:0!important;border-color:#78afe3
 
 
 /* =========================================================
-   WENODO DESIGN SYSTEM — shared retail workspace theme
+   CLOTHING SHOP ERP DESIGN SYSTEM — shared retail workspace theme
    White navigation · soft blue-grey canvas · violet/cyan
 ========================================================= */
 :root{
-  --wenodo-purple:#5148ed;
-  --wenodo-cyan:#08b8d4;
-  --wenodo-ink:#17233c;
-  --wenodo-muted:#667b98;
-  --wenodo-bg:#f3f5fb;
-  --wenodo-border:#e1e8f2;
-  --wenodo-soft:#f7f9fc;
+  --erp-purple:#5148ed;
+  --erp-cyan:#08b8d4;
+  --erp-ink:#17233c;
+  --erp-muted:#667b98;
+  --erp-bg:#f3f5fb;
+  --erp-border:#e1e8f2;
+  --erp-soft:#f7f9fc;
 }
 *{box-sizing:border-box}
-body{background:var(--wenodo-bg);color:var(--wenodo-ink);font-family:Inter,"Segoe UI",Arial,sans-serif}
-.shell{min-height:100vh;background:var(--wenodo-bg)}
+body{background:var(--erp-bg);color:var(--erp-ink);font-family:Inter,"Segoe UI",Arial,sans-serif}
+.shell{min-height:100vh;background:var(--erp-bg)}
 .shell>aside{
   position:fixed;inset:0 auto 0 0;width:310px;
-  background:#fff;border-right:1px solid var(--wenodo-border);
-  padding:27px 15px 18px;box-shadow:none;color:var(--wenodo-ink);
+  background:#fff;border-right:1px solid var(--erp-border);
+  padding:27px 15px 18px;box-shadow:none;color:var(--erp-ink);
 }
 .retail-brand{
   min-height:66px;display:flex;align-items:center;justify-content:center;
@@ -174,22 +174,22 @@ body{background:var(--wenodo-bg);color:var(--wenodo-ink);font-family:Inter,"Sego
   content:"";width:19px;height:19px;flex:0 0 19px;border-radius:6px;
   background:#eef0ff;box-shadow:inset 0 0 0 5px #eef0ff;
 }
-.shell>aside>button:hover{background:#f6f7ff;color:var(--wenodo-purple);transform:translateX(1px)}
+.shell>aside>button:hover{background:#f6f7ff;color:var(--erp-purple);transform:translateX(1px)}
 .shell>aside>button.active{
-  background:#ecebff;border-color:var(--wenodo-cyan);color:var(--wenodo-purple);
+  background:#ecebff;border-color:var(--erp-cyan);color:var(--erp-purple);
   box-shadow:0 2px 7px rgba(81,72,237,.07);
 }
-.shell>aside>button.active:before{background:var(--wenodo-purple);box-shadow:none}
+.shell>aside>button.active:before{background:var(--erp-purple);box-shadow:none}
 .shell>aside .accounting-nav-link{
   display:flex;align-items:center;gap:10px;width:100%;margin:18px 0 0;padding:13px 15px;
-  border:0;border-radius:13px;background:linear-gradient(105deg,var(--wenodo-purple),var(--wenodo-cyan));
+  border:0;border-radius:13px;background:linear-gradient(105deg,var(--erp-purple),var(--erp-cyan));
   color:#fff;text-decoration:none;font-size:13px;font-weight:700;box-shadow:0 6px 15px rgba(67,105,221,.16);
 }
 .shell>aside .accounting-nav-link:hover{filter:brightness(.97);color:#fff}
-.shell>main{margin-left:310px;min-width:0;background:var(--wenodo-bg)}
+.shell>main{margin-left:310px;min-width:0;background:var(--erp-bg)}
 .shell>main>header{
   height:76px;min-height:76px;padding:0 34px;background:#fff;
-  border-bottom:1px solid var(--wenodo-border);position:sticky;top:0;z-index:4;
+  border-bottom:1px solid var(--erp-border);position:sticky;top:0;z-index:4;
 }
 .shell>main>header>b{font-size:15px;color:#192a47;font-weight:750}
 .header-actions{gap:14px}
@@ -199,7 +199,7 @@ body{background:var(--wenodo-bg);color:var(--wenodo-ink);font-family:Inter,"Sego
 .heading>div>p:last-child{font-size:13px;color:#71849e;line-height:1.55}
 .eyebrow{font-size:10px;letter-spacing:1.25px;color:#6479a0;font-weight:800}
 article,.stats article{
-  background:#fff;border:1px solid var(--wenodo-border);border-radius:18px;
+  background:#fff;border:1px solid var(--erp-border);border-radius:18px;
   box-shadow:0 7px 24px rgba(36,57,93,.045);
 }
 article{padding:22px}
@@ -207,7 +207,7 @@ article>h3,.toolbar h3{font-size:15px;color:#192a47;font-weight:750}
 .stats{gap:16px;margin:22px 0}
 .stats article{padding:22px 21px;min-width:0}
 .stats small{font-size:11px;color:#6d8099;font-weight:700;text-transform:uppercase;letter-spacing:.25px}
-.stats h2{font-size:27px;letter-spacing:-.5px;color:var(--wenodo-purple);margin:9px 0 0}
+.stats h2{font-size:27px;letter-spacing:-.5px;color:var(--erp-purple);margin:9px 0 0}
 .dashboard-grid{gap:18px;margin:18px 0}
 .dashboard-grid article{padding:22px}
 .toolbar{gap:12px}
@@ -221,7 +221,7 @@ tbody tr:hover td{background:#fafbff}
 button{font-family:inherit;transition:background .17s ease,border-color .17s ease,transform .17s ease,box-shadow .17s ease}
 button:not(:disabled):active{transform:translateY(1px)}
 button.primary,.primary,.primary-button{
-  background:linear-gradient(105deg,var(--wenodo-purple),var(--wenodo-cyan))!important;
+  background:linear-gradient(105deg,var(--erp-purple),var(--erp-cyan))!important;
   color:#fff!important;border:0!important;border-radius:13px!important;
   box-shadow:0 6px 15px rgba(67,105,221,.15);
   font-weight:750;
@@ -231,7 +231,7 @@ button:not(.primary):not(.text-button):not(.dismiss):not(.small-action):not(.acc
   border-radius:11px;
 }
 .secondary-action{background:#fff;border:1px solid #dce5f0;color:#5e7089;border-radius:10px;font-weight:650}
-.small-action{background:#efefff!important;color:var(--wenodo-purple)!important;border:1px solid #e0dfff!important;border-radius:9px!important}
+.small-action{background:#efefff!important;color:var(--erp-purple)!important;border:1px solid #e0dfff!important;border-radius:9px!important}
 input,select,textarea{
   border:1px solid #dfe7f1!important;border-radius:11px!important;
   background:#f8fafc;color:#263a58;font:inherit;
@@ -244,22 +244,22 @@ input:focus,select:focus,textarea:focus{
 .ok{background:#e6f8f0;color:#15976c}
 .demo{background:#fff3e6;color:#c07825}
 .notice{border:1px solid #f1dfb9;background:#fff9ec;border-radius:11px;padding:13px 15px;color:#946b28}
-.pos-item{border:1px solid var(--wenodo-border);background:#fff;border-radius:15px;box-shadow:0 4px 15px rgba(36,57,93,.035)}
+.pos-item{border:1px solid var(--erp-border);background:#fff;border-radius:15px;box-shadow:0 4px 15px rgba(36,57,93,.035)}
 .pos-item h3{color:#1b2c4b}
-.pos-item-bottom button{background:#efefff;color:var(--wenodo-purple);border-radius:9px}
-.cart-panel{border-color:var(--wenodo-border);border-radius:18px;box-shadow:0 8px 24px rgba(36,57,93,.06)}
-.invoice-preview{border:1px solid var(--wenodo-border);border-radius:18px;box-shadow:0 8px 24px rgba(36,57,93,.055);background:#fff}
+.pos-item-bottom button{background:#efefff;color:var(--erp-purple);border-radius:9px}
+.cart-panel{border-color:var(--erp-border);border-radius:18px;box-shadow:0 8px 24px rgba(36,57,93,.06)}
+.invoice-preview{border:1px solid var(--erp-border);border-radius:18px;box-shadow:0 8px 24px rgba(36,57,93,.055);background:#fff}
 .invoice-company-logo{background:#fff;border:1px solid #edf1f7}
 .company-settings-form{display:flex;flex-direction:column;gap:16px}
 .company-settings-form>article{padding:24px}
 .company-brand-card{background:linear-gradient(120deg,#fff 0%,#f8f9ff 100%)}
 .company-logo-preview{border:1px dashed #ccd8e8;background:#fff;border-radius:16px}
 .company-logo-preview img{width:100%;height:100%;object-fit:contain;padding:8px}
-.logo-upload{background:#efefff;color:var(--wenodo-purple);border:1px solid #dedcff;border-radius:10px}
-.settings-step{background:#efefff;color:var(--wenodo-purple);border-radius:9px}
+.logo-upload{background:#efefff;color:var(--erp-purple);border:1px solid #dedcff;border-radius:10px}
+.settings-step{background:#efefff;color:var(--erp-purple);border-radius:9px}
 .settings-backup-card{display:flex;align-items:center;justify-content:space-between;gap:18px}
 .first-run-card{border:1px solid #dfe5ff;background:linear-gradient(115deg,#f4f3ff 0%,#fff 70%)}
-.first-run-steps b{background:#ecebff;color:var(--wenodo-purple)}
+.first-run-steps b{background:#ecebff;color:var(--erp-purple)}
 .auth-screen{
   min-height:100vh;display:grid;place-items:center;padding:24px;
   background:linear-gradient(120deg,#4052e8 0%,#277fda 48%,#12a8d0 100%);
@@ -360,3 +360,8 @@ input:focus,select:focus,textarea:focus{
   .header-left{gap:8px}
   .sidebar-toggle,.icon-button.refresh-button{width:38px;height:38px;flex-basis:38px}
 }
+
+
+/* Sidebar can be fully hidden and restored from the workspace header. */
+.shell.sidebar-hidden>aside{display:none!important}
+.shell.sidebar-hidden>main{margin-left:0!important}
