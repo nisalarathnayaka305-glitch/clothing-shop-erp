@@ -60,7 +60,10 @@ export default function AccountingWorkspace({session,role}:{session:Session|null
     return {account,debit,credit,balance:account.normal_balance==='debit'?debit-credit:credit-debit}
   })
   const balanceType=(type:string)=>balanceTotals.filter(x=>x.account.account_type===type).reduce((n,x)=>n+x.balance,0)
-  const salesRevenue=totals.filter(x=>x.account.code==='4000').reduce((n,x)=>n+x.credit-x.debit,0)\n  const salesContra=totals.filter(x=>['4010','4020'].includes(x.account.code)).reduce((n,x)=>n+x.debit-x.credit,0)\n  const otherIncome=totals.filter(x=>x.account.code==='4100').reduce((n,x)=>n+x.credit-x.debit,0)\n  const revenue=salesRevenue-salesContra+otherIncome,expenses=typeBalance('Expense'),netProfit=revenue-expenses
+  const salesRevenue=totals.filter(x=>x.account.code==='4000').reduce((n,x)=>n+x.credit-x.debit,0)
+  const salesContra=totals.filter(x=>['4010','4020'].includes(x.account.code)).reduce((n,x)=>n+x.debit-x.credit,0)
+  const otherIncome=totals.filter(x=>x.account.code==='4100').reduce((n,x)=>n+x.credit-x.debit,0)
+  const revenue=salesRevenue-salesContra+otherIncome,expenses=typeBalance('Expense'),netProfit=revenue-expenses
   const assets=typeBalance('Asset'),liabilities=typeBalance('Liability'),equity=typeBalance('Equity')
   const balanceAssets=balanceType('Asset'),balanceLiabilities=balanceType('Liability'),balanceEquity=balanceType('Equity')
   const balanced=Math.abs(debitTotal-creditTotal)<0.005
