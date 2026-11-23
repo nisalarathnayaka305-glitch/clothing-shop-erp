@@ -698,10 +698,13 @@ export default function App() {
 
   async function loadCashSessions() {
     if (!supabase || !session) return
-    const { data, error } = await supabase.from('cash_sessions').select('*').order('opened_at',{ascending:false}).limit(100)
-    if (error) { setNotice(error.message); return }
-    setCashHistory(data || [])
-    setCashSession((data || []).find((x:any)=>x.status==='Open' && x.cashier_id===session.user.id) || null)
+    const [history, active] = await Promise.all([
+      supabase.from('cash_sessions').select('*').order('opened_at',{ascending:false}).limit(100),
+      supabase.from('cash_sessions').select('*').eq('cashier_id',session.user.id).eq('status','Open').maybeSingle()
+    ])
+    if (history.error || active.error) { setNotice(history.error?.message || active.error?.message || 'Unable to load cash sessions.'); return }
+    setCashHistory(history.data || [])
+    setCashSession(active.data || null)
   }
 
   async function openCashSession(event: FormEvent) {
@@ -736,14 +739,27 @@ export default function App() {
 
   async function createPurchaseRequest(event: FormEvent) {
     event.preventDefault(); if(!supabase) return
-    if(!purchaseRequestForm.supplier_id || !purchaseRequestForm.variant_id || Number(purchaseRequestForm.quantity)<=0 || Number(purchaseRequestForm.unit_cost)<0) {setNotice('Select supplier and variant and enter valid quantity and cost.');return}
+    if(!purchaseRequestForm.supplier_id || !purchaseRequestForm.variant_id || !Number.isInteger(Number(purchaseRequestForm.quantity)) || Number(purchaseRequestForm.quantity)<=0 || !Number.isFinite(Number(purchaseRequestForm.unit_cost)) || Number(purchaseRequestForm.unit_cost)<0) {setNotice('Select supplier and variant and enter a valid whole-number quantity and cost.');return}
     setBusy(true)
     const {data,error}=await supabase.from('purchase_requests').insert({supplier_id:purchaseRequestForm.supplier_id,notes:purchaseRequestForm.notes.trim()||null}).select('id').single()
     if(error){setNotice(error.message);setBusy(false);return}
     const item=await supabase.from('purchase_request_items').insert({request_id:data.id,variant_id:purchaseRequestForm.variant_id,quantity:Number(purchaseRequestForm.quantity),estimated_unit_cost:Number(purchaseRequestForm.unit_cost)})
-    if(item.error){await supabase.from('purchase_requests').delete().eq('id',data.id);setNotice(item.error.message);setBusy(false);return}
+    if(item.error){
+      const cleanup=await supabase.from('purchase_requests').delete().eq('id',data.id)
+      setNotice(cleanup.error ? `Item could not be added: ${item.error.message}. Draft request ${data.id} remains and needs review: ${cleanup.error.message}` : item.error.message)
+      await loadPurchaseRequests()
+      setBusy(false)
+      return
+    }
     const submit=await supabase.rpc('submit_purchase_request',{p_request_id:data.id})
-    if(submit.error)setNotice(submit.error.message);else{setNotice('Purchase request submitted for approval.');setPurchaseRequestForm({supplier_id:'',variant_id:'',quantity:'1',unit_cost:'0',notes:''});await loadPurchaseRequests()}
+    if(submit.error){
+      setNotice(`Request saved as Draft, but submission failed: ${submit.error.message}`)
+      await loadPurchaseRequests()
+    }else{
+      setNotice('Purchase request submitted for approval.')
+      setPurchaseRequestForm({supplier_id:'',variant_id:'',quantity:'1',unit_cost:'0',notes:''})
+      await loadPurchaseRequests()
+    }
     setBusy(false)
   }
 
