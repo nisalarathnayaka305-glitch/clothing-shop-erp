@@ -135,3 +135,175 @@ input:focus,select:focus,textarea:focus{outline:0!important;border-color:#78afe3
 .first-run-steps b{width:22px;height:22px;border-radius:7px;display:grid;place-items:center;background:#e5f1ff;color:#286ba9}
 .first-run-actions{display:flex;gap:9px;flex-wrap:wrap;flex-shrink:0}
 @media(max-width:850px){.first-run-card{align-items:flex-start;flex-direction:column}.first-run-actions{width:100%}.first-run-actions>*{flex:1}}
+
+
+/* =========================================================
+   WENODO DESIGN SYSTEM — shared retail workspace theme
+   White navigation · soft blue-grey canvas · violet/cyan
+========================================================= */
+:root{
+  --wenodo-purple:#5148ed;
+  --wenodo-cyan:#08b8d4;
+  --wenodo-ink:#17233c;
+  --wenodo-muted:#667b98;
+  --wenodo-bg:#f3f5fb;
+  --wenodo-border:#e1e8f2;
+  --wenodo-soft:#f7f9fc;
+}
+*{box-sizing:border-box}
+body{background:var(--wenodo-bg);color:var(--wenodo-ink);font-family:Inter,"Segoe UI",Arial,sans-serif}
+.shell{min-height:100vh;background:var(--wenodo-bg)}
+.shell>aside{
+  position:fixed;inset:0 auto 0 0;width:310px;
+  background:#fff;border-right:1px solid var(--wenodo-border);
+  padding:27px 15px 18px;box-shadow:none;color:var(--wenodo-ink);
+}
+.retail-brand{
+  min-height:66px;display:flex;align-items:center;justify-content:center;
+  padding:0 10px 23px;margin:0 0 22px;border-bottom:1px solid #edf1f7;
+}
+.retail-brand img{display:block;width:166px;height:48px;object-fit:contain;background:#fff}
+.shell>aside>button{
+  display:flex;align-items:center;gap:12px;width:100%;min-height:48px;
+  padding:11px 17px;margin:5px 0;border:2px solid transparent;
+  border-radius:16px;background:transparent;color:#61738d;
+  font-size:14px;font-weight:600;text-align:left;
+  transition:background .18s ease,border-color .18s ease,color .18s ease,transform .18s ease;
+}
+.shell>aside>button:before{
+  content:"";width:19px;height:19px;flex:0 0 19px;border-radius:6px;
+  background:#eef0ff;box-shadow:inset 0 0 0 5px #eef0ff;
+}
+.shell>aside>button:hover{background:#f6f7ff;color:var(--wenodo-purple);transform:translateX(1px)}
+.shell>aside>button.active{
+  background:#ecebff;border-color:var(--wenodo-cyan);color:var(--wenodo-purple);
+  box-shadow:0 2px 7px rgba(81,72,237,.07);
+}
+.shell>aside>button.active:before{background:var(--wenodo-purple);box-shadow:none}
+.shell>aside .accounting-nav-link{
+  display:flex;align-items:center;gap:10px;width:100%;margin:18px 0 0;padding:13px 15px;
+  border:0;border-radius:13px;background:linear-gradient(105deg,var(--wenodo-purple),var(--wenodo-cyan));
+  color:#fff;text-decoration:none;font-size:13px;font-weight:700;box-shadow:0 6px 15px rgba(67,105,221,.16);
+}
+.shell>aside .accounting-nav-link:hover{filter:brightness(.97);color:#fff}
+.shell>main{margin-left:310px;min-width:0;background:var(--wenodo-bg)}
+.shell>main>header{
+  height:76px;min-height:76px;padding:0 34px;background:#fff;
+  border-bottom:1px solid var(--wenodo-border);position:sticky;top:0;z-index:4;
+}
+.shell>main>header>b{font-size:15px;color:#192a47;font-weight:750}
+.header-actions{gap:14px}
+.shell>main>section{max-width:1650px;padding:30px 34px 46px}
+.heading{margin-bottom:22px;align-items:flex-end}
+.heading h1{font-size:29px;letter-spacing:-.65px;color:#17233c;margin:5px 0 6px;font-weight:800}
+.heading>div>p:last-child{font-size:13px;color:#71849e;line-height:1.55}
+.eyebrow{font-size:10px;letter-spacing:1.25px;color:#6479a0;font-weight:800}
+article,.stats article{
+  background:#fff;border:1px solid var(--wenodo-border);border-radius:18px;
+  box-shadow:0 7px 24px rgba(36,57,93,.045);
+}
+article{padding:22px}
+article>h3,.toolbar h3{font-size:15px;color:#192a47;font-weight:750}
+.stats{gap:16px;margin:22px 0}
+.stats article{padding:22px 21px;min-width:0}
+.stats small{font-size:11px;color:#6d8099;font-weight:700;text-transform:uppercase;letter-spacing:.25px}
+.stats h2{font-size:27px;letter-spacing:-.5px;color:var(--wenodo-purple);margin:9px 0 0}
+.dashboard-grid{gap:18px;margin:18px 0}
+.dashboard-grid article{padding:22px}
+.toolbar{gap:12px}
+.toolbar h3{margin-right:auto}
+.tablewrap{margin-top:14px;border:1px solid #e7edf5;border-radius:13px;overflow:auto;background:#fff}
+table{width:100%;border-collapse:separate;border-spacing:0;white-space:nowrap}
+th{padding:13px 14px;background:#f7f9fc;color:#71849e;font-size:10px;letter-spacing:.65px;border-bottom:1px solid #e4ebf4}
+td{padding:13px 14px;font-size:12px;color:#405572;border-bottom:1px solid #edf1f6}
+tbody tr:last-child td{border-bottom:0}
+tbody tr:hover td{background:#fafbff}
+button{font-family:inherit;transition:background .17s ease,border-color .17s ease,transform .17s ease,box-shadow .17s ease}
+button:not(:disabled):active{transform:translateY(1px)}
+button.primary,.primary,.primary-button{
+  background:linear-gradient(105deg,var(--wenodo-purple),var(--wenodo-cyan))!important;
+  color:#fff!important;border:0!important;border-radius:13px!important;
+  box-shadow:0 6px 15px rgba(67,105,221,.15);
+  font-weight:750;
+}
+button.primary:hover,.primary:hover,.primary-button:hover{filter:brightness(.97);box-shadow:0 8px 18px rgba(67,105,221,.2)}
+button:not(.primary):not(.text-button):not(.dismiss):not(.small-action):not(.accounting-nav-link):not(.logo-upload):not(.secondary-action){
+  border-radius:11px;
+}
+.secondary-action{background:#fff;border:1px solid #dce5f0;color:#5e7089;border-radius:10px;font-weight:650}
+.small-action{background:#efefff!important;color:var(--wenodo-purple)!important;border:1px solid #e0dfff!important;border-radius:9px!important}
+input,select,textarea{
+  border:1px solid #dfe7f1!important;border-radius:11px!important;
+  background:#f8fafc;color:#263a58;font:inherit;
+}
+input:focus,select:focus,textarea:focus{
+  outline:0!important;border-color:#7b8cf3!important;
+  box-shadow:0 0 0 3px rgba(81,72,237,.11)!important;
+}
+.ok,.demo{font-size:10px;font-weight:750;letter-spacing:.2px;padding:8px 12px;border-radius:30px}
+.ok{background:#e6f8f0;color:#15976c}
+.demo{background:#fff3e6;color:#c07825}
+.notice{border:1px solid #f1dfb9;background:#fff9ec;border-radius:11px;padding:13px 15px;color:#946b28}
+.pos-item{border:1px solid var(--wenodo-border);background:#fff;border-radius:15px;box-shadow:0 4px 15px rgba(36,57,93,.035)}
+.pos-item h3{color:#1b2c4b}
+.pos-item-bottom button{background:#efefff;color:var(--wenodo-purple);border-radius:9px}
+.cart-panel{border-color:var(--wenodo-border);border-radius:18px;box-shadow:0 8px 24px rgba(36,57,93,.06)}
+.invoice-preview{border:1px solid var(--wenodo-border);border-radius:18px;box-shadow:0 8px 24px rgba(36,57,93,.055);background:#fff}
+.invoice-company-logo{background:#fff;border:1px solid #edf1f7}
+.company-settings-form{display:flex;flex-direction:column;gap:16px}
+.company-settings-form>article{padding:24px}
+.company-brand-card{background:linear-gradient(120deg,#fff 0%,#f8f9ff 100%)}
+.company-logo-preview{border:1px dashed #ccd8e8;background:#fff;border-radius:16px}
+.company-logo-preview img{width:100%;height:100%;object-fit:contain;padding:8px}
+.logo-upload{background:#efefff;color:var(--wenodo-purple);border:1px solid #dedcff;border-radius:10px}
+.settings-step{background:#efefff;color:var(--wenodo-purple);border-radius:9px}
+.settings-backup-card{display:flex;align-items:center;justify-content:space-between;gap:18px}
+.first-run-card{border:1px solid #dfe5ff;background:linear-gradient(115deg,#f4f3ff 0%,#fff 70%)}
+.first-run-steps b{background:#ecebff;color:var(--wenodo-purple)}
+.auth-screen{
+  min-height:100vh;display:grid;place-items:center;padding:24px;
+  background:linear-gradient(120deg,#4052e8 0%,#277fda 48%,#12a8d0 100%);
+}
+.login-card{
+  width:min(500px,calc(100% - 20px));min-height:450px;padding:42px 38px;
+  border:0;border-radius:28px;background:#fff;
+  box-shadow:0 25px 75px rgba(13,43,112,.2);
+}
+.login-logo{display:flex;justify-content:center;align-items:center;margin:0 auto 20px;width:100%;height:62px}
+.login-logo img,.login-logo-image{width:235px;max-width:75%;height:auto;max-height:65px;object-fit:contain}
+.login-card>.eyebrow{text-align:center;margin:0 0 7px;color:#7486a0}
+.login-card h1{text-align:center;font-size:27px;color:#1a2b49;margin:7px 0}
+.login-card>.muted{text-align:center;color:#7486a0;font-size:13px;margin:0 0 25px}
+.login-card label{display:block;color:#586e8a;font-size:11px;font-weight:800;letter-spacing:.45px;margin:15px 0}
+.login-card input{display:block;width:100%;padding:14px 15px;margin-top:7px;background:#f7f9fc;font-size:14px}
+.login-card .primary.full{width:100%;min-height:48px;margin-top:4px;font-size:14px}
+.login-card .hint{text-align:center;font-size:10px;color:#8797ac;margin-top:20px}
+.loading-card{width:min(500px,calc(100% - 20px));padding:45px;background:#fff;border-radius:24px;text-align:center;box-shadow:0 25px 75px rgba(13,43,112,.2)}
+.loading-card p{color:#70829a;font-size:13px}
+@media(max-width:1050px){
+  .shell>aside{width:260px}.shell>main{margin-left:260px}
+  .shell>main>section{padding:24px 22px}
+}
+@media(max-width:750px){
+  .shell>aside{position:static;width:auto;min-height:auto;padding:14px}
+  .retail-brand{min-height:50px;padding:0 5px 12px;margin-bottom:10px}
+  .retail-brand img{width:135px;height:38px}
+  .shell>aside>button{display:inline-flex;width:auto;min-height:39px;margin:3px 4px 3px 0;padding:8px 10px;font-size:11px;border-radius:12px}
+  .shell>aside>button:before{display:none}
+  .shell>main{margin:0}
+  .shell>main>header{height:60px;min-height:60px;padding:0 15px}
+  .shell>main>section{padding:18px 13px 30px}
+  .heading{align-items:flex-start;flex-direction:column}
+  .stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .company-settings-grid{grid-template-columns:1fr}
+  .company-settings-grid .settings-wide{grid-column:auto}
+  .settings-save-row,.settings-backup-card{align-items:stretch;flex-direction:column}
+  .settings-save-row .primary,.settings-backup-card .logo-actions>*{width:100%}
+  .first-run-card{align-items:flex-start;flex-direction:column}
+}
+@media(max-width:460px){.stats{grid-template-columns:1fr}.login-card{padding:32px 23px;min-height:0}}
+@media print{
+  .shell>aside,.shell>main>header,.invoice-preview .heading button{display:none!important}
+  .shell>main{margin:0!important}.shell>main>section{padding:0!important}
+  .invoice-preview{border:0;box-shadow:none;padding:0}
+}
