@@ -85,7 +85,6 @@ export default function AccountingWorkspace({session,role}:{session:Session|null
   const balanceAssets=balanceType('Asset'),balanceLiabilities=balanceType('Liability'),balanceEquity=balanceType('Equity')
   const totalBalanceEquity=balanceEquity+balanceNetProfit
   const balanced=Math.abs(debitTotal-creditTotal)<0.005
-  const balanced=Math.abs(debitTotal-creditTotal)<0.005
 
   async function refreshOpening(date=openingDate) {
     if(!supabase)return
