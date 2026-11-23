@@ -53,7 +53,7 @@ const nav: { id: Tab; label: string; group: string }[] = [
 ]
 
 function downloadCsv(filename: string, rows: (string | number)[][]) {
-  const csv = rows.map(row => row.map(value => '"' + String(value ?? '').replaceAll('"','""') + '"').join(',')).join('\n')
+  const csv = rows.map(row => row.map(value => '"' + String(value ?? '').replace(/"/g,'""') + '"').join(',')).join('\n')
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
   const url = URL.createObjectURL(blob)
   const anchor = document.createElement('a')
