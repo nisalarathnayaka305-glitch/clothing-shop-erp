@@ -27,7 +27,7 @@ It shares the existing Clothing Shop ERP Supabase project and authentication, so
 
 The accounting tables use the `acct_*` prefix and do not change the existing ERP operational tables. At this stage, financial statements use only posted accounting journal entries.
 
-ERP transaction synchronisation (sales, returns, inventory/COGS, customer receipts, purchases, supplier payments, expenses and payroll) is intentionally a later integration step. Until that integration is completed and opening balances are entered and reconciled, the reports are a manual accounting workspace and must not be treated as complete statutory financial statements.
+ERP transaction auto-posting is enabled for new sales, returns, inventory/COGS, customer receipts, purchases, supplier payments, expenses and payroll runs marked Paid. Historical transactions are not backfilled. Enter and reconcile opening balances before relying on the Balance Sheet. Financial statements are based on posted accounting journals and should be reviewed by the shop's accountant before being used as statutory reports.
 
 ## Database
 
