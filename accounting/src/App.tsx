@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { FormEvent } from 'react'
 import type { User } from '@supabase/supabase-js'
 import { supabase } from './lib/supabase'
-import { BookOpen, Calculator, LogOut, FileText, LayoutDashboard, ListTree, PackageSearch, PanelLeftClose, PanelLeftOpen, RefreshCw, Scale, Store, TrendingUp, Wallet } from 'lucide-react'
+import { BookOpen, CalendarCheck, Calculator, LogOut, FileText, LayoutDashboard, ListTree, PackageSearch, PanelLeftClose, PanelLeftOpen, RefreshCw, Scale, Store, TrendingUp, Wallet } from 'lucide-react'
 
 type AccountType = 'Asset' | 'Liability' | 'Equity' | 'Revenue' | 'Contra Revenue' | 'Cost of Sales' | 'Expense' | 'Other Income' | 'Other Expense'
 type Account = {
@@ -71,7 +71,7 @@ function downloadCsv(filename: string, rows: (string | number)[][]) {
 function App() {
   const [user, setUser] = useState<User | null>(null)
   const [role, setRole] = useState<string | null>(null)
-  const [companySettings, setCompanySettings] = useState({ company_name: 'Clothing Shop', tagline: 'ACCOUNTING' })
+  const [companySettings, setCompanySettings] = useState({ company_name: 'Clothing Shop', tagline: 'ACCOUNTING', logo_data_url: '' })
   const [tab, setTab] = useState<Tab>('overview')
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => { try { return window.localStorage.getItem('clothing-erp-accounting-sidebar-hidden') === 'true' } catch { return false } })
   useEffect(() => { try { window.localStorage.setItem('clothing-erp-accounting-sidebar-hidden', String(sidebarCollapsed)) } catch {} }, [sidebarCollapsed])
@@ -121,7 +121,7 @@ function App() {
       supabase.from('products').select('id,product_no,sku,name,category,cost_price,active').order('product_no'),
       supabase.from('product_variants').select('id,product_id,size,colour'),
       supabase.from('stock_balances').select('variant_id,quantity,reorder_level'),
-      supabase.from('company_settings').select('company_name,tagline').eq('id', true).maybeSingle(),
+      supabase.from('company_settings').select('company_name,tagline,logo_data_url').eq('id', true).maybeSingle(),
     ])
     if (accountResult.error) setError(accountResult.error.message)
     else setAccounts((accountResult.data || []) as Account[])
@@ -356,9 +356,9 @@ function App() {
   if (!['Admin','Manager'].includes(role || '')) return <main className="login-shell"><section className="login-card"><h1>Access restricted</h1><p>{error || 'Admin or Manager access is required.'}</p><button className="secondary-button" onClick={handleSignOut}>Sign out</button></section></main>
 
   return (
-    <div className={sidebarCollapsed ? "app-shell sidebar-hidden" : "app-shell"}>
+    <div className={sidebarCollapsed ? "app-shell sidebar-collapsed" : "app-shell"}>
       <aside className="sidebar">
-        <div className="brand"><div className="brand-mark"><Store size={18}/></div><div className="brand-copy"><strong>{companySettings.company_name || 'Clothing Shop'}</strong><small>{companySettings.tagline || 'ACCOUNTING'}</small></div></div>
+        <div className="brand"><div className="brand-mark">{companySettings.logo_data_url?<img src={companySettings.logo_data_url} alt="Company logo"/>:<Store size={18}/>}</div><div className="brand-copy"><strong>{companySettings.company_name || 'Clothing Shop'}</strong><small>{companySettings.tagline || 'ACCOUNTING'}</small></div></div><div className="module-switcher"><a href="/clothing-shop-erp/" title={sidebarCollapsed?'ERP':undefined}><Store size={18}/><span className="module-label">ERP</span></a><a href="/clothing-shop-erp/leave/" title={sidebarCollapsed?'Attendance & Leave':undefined}><CalendarCheck size={18}/><span className="module-label">Attendance & Leave</span></a><a className="current" href="/clothing-shop-erp/accounting/" title={sidebarCollapsed?'Accounting':undefined}><BookOpen size={18}/><span className="module-label">Accounting</span></a></div>
         {['WORKSPACE','REPORTS','ACCOUNTING'].map(group=><div className="nav-group" key={group}><p>{group}</p>{nav.filter(item=>item.group===group).map(item=>{const Icon=accountingIcons[item.id];return <button key={item.id} className={tab===item.id?'nav-item active':'nav-item'} onClick={()=>setTab(item.id)} title={sidebarCollapsed ? item.label : undefined}><Icon className="nav-icon" size={17} strokeWidth={2}/><span className="nav-label">{item.label}</span></button>})}</div>)}
         <div className="sidebar-bottom"><span className="status-dot"/> <span className="sidebar-status-label">Supabase connected</span><small>{role}</small><button onClick={handleSignOut}><LogOut size={15}/><span className="sidebar-logout-label">Sign out</span></button></div>
       </aside>
