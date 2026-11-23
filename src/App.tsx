@@ -1,7 +1,8 @@
 import { useEffect, useState, type FormEvent, type ChangeEvent } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { supabase, supabaseConfigured, money, type Product, type ProductVariant } from './lib'
-import { Activity, Banknote, BarChart3, BookOpen, CalendarCheck, CircleHelp, ClipboardList, CreditCard, Gift, LayoutDashboard, Menu, Package, PanelLeftClose, PanelLeftOpen, Receipt, RefreshCw, Repeat, Settings, ShoppingBag, ShoppingCart, Store, Truck, UserCog, Users, Wallet } from 'lucide-react'
+import { Activity, Banknote, BarChart3, BookOpen, CalendarCheck, CircleHelp, ClipboardList, CreditCard, Gift, LayoutDashboard, Package, PanelLeftClose, PanelLeftOpen, Receipt, RefreshCw, Repeat, Settings, ShoppingBag, ShoppingCart, Store, Truck, UserCog, Users, Wallet } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
 
 const demo: Product[] = [
   { id: '1', product_no: 'PRD-00001', sku: 'TSH-001', name: 'Classic Cotton T-Shirt', category: 'T-Shirts', selling_price: 2500, cost_price: 1450, active: true },
@@ -17,7 +18,7 @@ type CartLine = { variant_id: string; product_no: string; name: string; sku: str
 type Invoice = { invoice_no: string; subtotal: number; discount: number; total: number; amount_received: number; change_amount: number; payment_method: string; created_at: string; items: CartLine[] }
 
 const navigation = ['Overview', 'Point of Sale', 'Sales History', 'Returns & Exchanges', 'Products & Stock', 'Purchases', 'Purchase Orders', 'Customers', 'Customer Accounts', 'Loyalty', 'Cash Management', 'Suppliers', 'Supplier Accounts', 'Expenses', 'Reports', 'Employees', 'Attendance', 'Payroll', 'Settings']
-const moduleIcons = {
+const moduleIcons: Record<string, LucideIcon> = {
   'Overview': LayoutDashboard, 'Point of Sale': ShoppingCart, 'Sales History': Receipt,
   'Returns & Exchanges': Repeat, 'Products & Stock': Package, 'Purchases': ShoppingBag,
   'Purchase Orders': ClipboardList, 'Customers': Users, 'Customer Accounts': CreditCard,
