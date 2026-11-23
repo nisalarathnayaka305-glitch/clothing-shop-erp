@@ -300,7 +300,7 @@ function App() {
     </main>
   )
 
-  if (role && !['Admin','Manager'].includes(role)) return <main className="login-shell"><section className="login-card"><h1>Access restricted</h1><p>{error || 'Admin or Manager access is required.'}</p><button className="secondary-button" onClick={handleSignOut}>Sign out</button></section></main>
+  if (!['Admin','Manager'].includes(role || '')) return <main className="login-shell"><section className="login-card"><h1>Access restricted</h1><p>{error || 'Admin or Manager access is required.'}</p><button className="secondary-button" onClick={handleSignOut}>Sign out</button></section></main>
 
   return (
     <div className="app-shell">
