@@ -43,6 +43,7 @@ const money = (value: number) => new Intl.NumberFormat('en-LK', { style: 'curren
 const amount = (value: unknown) => Number(value || 0)
 const accountTypes: AccountType[] = ['Asset','Liability','Equity','Revenue','Contra Revenue','Cost of Sales','Expense','Other Income','Other Expense']
 const defaultNormalBalance = (type: AccountType) => ['Asset','Contra Revenue','Cost of Sales','Expense','Other Expense'].includes(type) ? 'debit' : 'credit'
+const WENODO_LOGO = '/clothing-shop-erp/wenodo-logo.svg'
 const nav: { id: Tab; label: string; group: string }[] = [
   { id: 'overview', label: 'Overview', group: 'WORKSPACE' },
   { id: 'profit', label: 'Profit & Loss', group: 'REPORTS' },
@@ -68,7 +69,7 @@ function downloadCsv(filename: string, rows: (string | number)[][]) {
 function App() {
   const [user, setUser] = useState<User | null>(null)
   const [role, setRole] = useState<string | null>(null)
-  const [companySettings, setCompanySettings] = useState({ company_name: 'Clothing Shop', tagline: 'ACCOUNTING', logo_data_url: '' })
+  const [companySettings, setCompanySettings] = useState({ company_name: 'Wenodo', tagline: 'CLOTHING RETAIL MANAGEMENT', logo_data_url: WENODO_LOGO })
   const [tab, setTab] = useState<Tab>('overview')
   const [accounts, setAccounts] = useState<Account[]>([])
   const [entries, setEntries] = useState<Entry[]>([])
@@ -325,8 +326,8 @@ function App() {
   if (!user) return (
     <main className="login-shell">
       <section className="login-card">
-        <div className="brand-mark">CS</div>
-        <p className="eyebrow">CLOTHING SHOP · FINANCE</p>
+        <div className="login-logo"><img src={WENODO_LOGO} alt="Wenodo"/></div>
+        <p className="eyebrow">WENODO · FINANCE</p>
         <h1>Accounting Workspace</h1>
         <p className="muted">Secure double-entry accounting and financial statements.</p>
         <form onSubmit={handleLogin} className="login-form">
@@ -345,7 +346,7 @@ function App() {
   return (
     <div className="app-shell">
       <aside className="sidebar">
-        <div className="brand"><div className="brand-mark">{companySettings.logo_data_url?<img src={companySettings.logo_data_url} alt="Company logo"/>:'CS'}</div><div><strong>{companySettings.company_name || 'Clothing Shop'}</strong><small>{companySettings.tagline || 'ACCOUNTING'}</small></div></div>
+        <div className="brand"><img src={companySettings.logo_data_url || WENODO_LOGO} alt="Wenodo logo"/></div>
         {['WORKSPACE','REPORTS','ACCOUNTING'].map(group=><div className="nav-group" key={group}><p>{group}</p>{nav.filter(item=>item.group===group).map(item=><button key={item.id} className={tab===item.id?'nav-item active':'nav-item'} onClick={()=>setTab(item.id)}><span className="nav-dot"/>{item.label}</button>)}</div>)}
         <div className="sidebar-bottom"><span className="status-dot"/> Supabase connected <small>{role}</small><button onClick={handleSignOut}>Sign out</button></div>
       </aside>
