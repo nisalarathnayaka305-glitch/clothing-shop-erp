@@ -31,8 +31,9 @@ export default function App() {
   const [attendance,setAttendance]=useState<any[]>([])
   const [page,setPage]=useState<Nav>('Dashboard')
   const [sidebarCollapsed,setSidebarCollapsed]=useState(()=>{try{return window.localStorage.getItem('clothing-erp-sidebar-hidden')==='true'}catch{return false}})
-  const [companySettings,setCompanySettings]=useState({company_name:'Clothing Shop',tagline:'PEOPLE & ATTENDANCE',logo_data_url:''})
+  const [companySettings,setCompanySettings]=useState({company_name:'Clothing Shop',tagline:'PEOPLE & ATTENDANCE',logo_data_url:'',theme_mode:'light'})
   useEffect(()=>{try{window.localStorage.setItem('clothing-erp-sidebar-hidden',String(sidebarCollapsed))}catch{}},[sidebarCollapsed])
+  useEffect(()=>{document.documentElement.dataset.theme=companySettings.theme_mode||'light'},[companySettings.theme_mode])
   const [loading,setLoading]=useState(true)
   const [busy,setBusy]=useState(false)
   const [notice,setNotice]=useState('')
@@ -51,7 +52,7 @@ export default function App() {
       supabase.rpc('current_employee_role'),
       supabase.from('employees').select('id,employee_no,full_name,auth_user_id,role,status').eq('auth_user_id',currentSession.user.id).maybeSingle(),
       supabase.from('leave_types').select('id,code,name,entitlement_days,is_paid,is_active').eq('is_active',true).order('name'),
-      supabase.from('company_settings').select('company_name,tagline,logo_data_url').eq('id',true).maybeSingle()
+      supabase.from('company_settings').select('company_name,tagline,logo_data_url,theme_mode').eq('id',true).maybeSingle()
     ])
     if(brandError)setError(brandError.message);else if(brand)setCompanySettings(brand)
     if(roleError) setError(roleError.message)
