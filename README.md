@@ -21,7 +21,7 @@ A separate accounting web app is built in `accounting/` and is hosted at:
 
 It uses the same Supabase project and Admin/Manager login to keep hosting and database costs low, while keeping accounting UI and data in separate `acct_*` tables. The workspace includes the Chart of Accounts, Journal Entries, General Ledger, Trial Balance, Profit & Loss, Balance Sheet and Opening Balances.
 
-Important: ERP transaction synchronisation is a later integration step. Until that is completed and opening balances are entered and reconciled, the accounting statements include only posted accounting journals.
+New ERP sales, returns, customer receipts, purchases, supplier payments, expenses and paid payroll are automatically posted to Accounting (migration 0030). Historical transactions are not backfilled. Enter and reconcile opening balances before relying on the Balance Sheet; statements include posted accounting journals only.
 
 Build both applications with `npm run build:all`.
 
