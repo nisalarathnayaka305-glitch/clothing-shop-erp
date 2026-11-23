@@ -47,3 +47,27 @@
 .qr-print-brand img{width:58px;height:58px;object-fit:contain;border-radius:10px;background:#fff}
 .qr-print-brand b{font:800 17px Manrope,sans-serif}
 @media print{.qr-actions{display:none!important}.qr-print-brand{margin-bottom:20px}.qr-print-brand img{width:72px;height:72px}}
+
+
+/* White sidebar by default; consistent with the ERP and Accounting workspaces */
+.sidebar{background:#fff!important;color:#263c57!important;border-right:1px solid #e5ebf3!important;box-shadow:4px 0 20px rgba(25,52,83,.025)!important}
+.brand{border-bottom:1px solid #edf1f7!important}
+.brand strong{color:#192f4b!important}
+.brand small{color:#8394a8!important}
+.brand-icon{background:#fff!important;border:1px solid #edf1f7}
+.module-switcher{border-bottom-color:#edf1f7!important}
+.module-switcher a{color:#60758f!important}
+.module-switcher a:hover,.module-switcher a.current{background:#edf4ff!important;color:#2868b8!important;box-shadow:none!important;border-color:#dce9f6!important}
+.sidebar nav button{color:#61738d!important}
+.sidebar nav button:hover,.sidebar nav button.active{background:#edf4ff!important;color:#2868b8!important;box-shadow:none!important}
+.leave-shell.sidebar-collapsed .sidebar{background:#fff!important}
+html[data-theme="dark"] body{background:#111827!important;color:#e5edf7!important}
+html[data-theme="dark"] .leave-shell,html[data-theme="dark"] .main-area{background:#111827!important}
+html[data-theme="dark"] .sidebar,html[data-theme="dark"] .topbar,html[data-theme="dark"] .panel,html[data-theme="dark"] .metric-card,html[data-theme="dark"] .login-card{background:#1b2738!important;border-color:#34445a!important;color:#e5edf7!important}
+html[data-theme="dark"] .brand strong,html[data-theme="dark"] .page-heading h1,html[data-theme="dark"] .panel h2,html[data-theme="dark"] .panel h3,html[data-theme="dark"] .topbar{color:#e5edf7!important}
+html[data-theme="dark"] .brand small,html[data-theme="dark"] .muted,html[data-theme="dark"] .hint{color:#a9bbd0!important}
+html[data-theme="dark"] .module-switcher a,html[data-theme="dark"] .sidebar nav button{color:#c2d0e0!important}
+html[data-theme="dark"] .module-switcher a.current,html[data-theme="dark"] .sidebar nav button.active{background:#293b54!important;color:#8ec4ff!important}
+html[data-theme="dark"] input,html[data-theme="dark"] select,html[data-theme="dark"] textarea{background:#172235!important;color:#e5edf7!important;border-color:#40516a!important}
+html[data-theme="dark"] table th{background:#202e42!important;color:#b4c4d7!important}
+html[data-theme="dark"] table td{border-color:#34445a!important;color:#d7e2ef!important}
