@@ -68,6 +68,7 @@ function downloadCsv(filename: string, rows: (string | number)[][]) {
 function App() {
   const [user, setUser] = useState<User | null>(null)
   const [role, setRole] = useState<string | null>(null)
+  const [companySettings, setCompanySettings] = useState({ company_name: 'Clothing Shop', tagline: 'ACCOUNTING', logo_data_url: '' })
   const [tab, setTab] = useState<Tab>('overview')
   const [accounts, setAccounts] = useState<Account[]>([])
   const [entries, setEntries] = useState<Entry[]>([])
@@ -108,13 +109,14 @@ function App() {
       return
     }
     setRole(String(roleResult))
-    const [accountResult, entryResult, periodResult, productResult, variantResult, stockResult] = await Promise.all([
+    const [accountResult, entryResult, periodResult, productResult, variantResult, stockResult, companySettingsResult] = await Promise.all([
       supabase.from('acct_accounts').select('id,code,name,account_type,normal_balance,description,is_system,is_active').order('code'),
       supabase.from('acct_journal_entries').select('id,entry_no,entry_date,description,reference,source_type,status,created_at,acct_journal_lines(id,account_id,debit,credit,memo,acct_accounts(code,name,account_type))').order('entry_date', { ascending: false }).order('entry_no', { ascending: false }).limit(2000),
       supabase.from('acct_fiscal_periods').select('id,name,period_start,period_end,status').order('period_start', { ascending: false }),
       supabase.from('products').select('id,product_no,sku,name,category,cost_price,active').order('product_no'),
       supabase.from('product_variants').select('id,product_id,size,colour'),
       supabase.from('stock_balances').select('variant_id,quantity,reorder_level'),
+      supabase.from('company_settings').select('company_name,tagline,logo_data_url').eq('id', true).maybeSingle(),
     ])
     if (accountResult.error) setError(accountResult.error.message)
     else setAccounts((accountResult.data || []) as Account[])
@@ -122,6 +124,8 @@ function App() {
     else setEntries((entryResult.data || []) as unknown as Entry[])
     if (periodResult.error) setError(periodResult.error.message)
     else setPeriods((periodResult.data || []) as Period[])
+    if (companySettingsResult.error) setError(companySettingsResult.error.message)
+    else if (companySettingsResult.data) setCompanySettings(companySettingsResult.data)
     if (productResult.error) setError(productResult.error.message)
     if (variantResult.error) setError(variantResult.error.message)
     if (stockResult.error) setError(stockResult.error.message)
@@ -341,7 +345,7 @@ function App() {
   return (
     <div className="app-shell">
       <aside className="sidebar">
-        <div className="brand"><div className="brand-mark">CS</div><div><strong>Clothing Shop</strong><small>ACCOUNTING</small></div></div>
+        <div className="brand"><div className="brand-mark">{companySettings.logo_data_url?<img src={companySettings.logo_data_url} alt="Company logo"/>:'CS'}</div><div><strong>{companySettings.company_name || 'Clothing Shop'}</strong><small>{companySettings.tagline || 'ACCOUNTING'}</small></div></div>
         {['WORKSPACE','REPORTS','ACCOUNTING'].map(group=><div className="nav-group" key={group}><p>{group}</p>{nav.filter(item=>item.group===group).map(item=><button key={item.id} className={tab===item.id?'nav-item active':'nav-item'} onClick={()=>setTab(item.id)}><span className="nav-dot"/>{item.label}</button>)}</div>)}
         <div className="sidebar-bottom"><span className="status-dot"/> Supabase connected <small>{role}</small><button onClick={handleSignOut}>Sign out</button></div>
       </aside>
@@ -414,7 +418,7 @@ function App() {
           {tab==='accounts'&&<section className="view-stack"><div className="panel"><div className="panel-heading"><div><h2>Chart of Accounts</h2><p>Account codes and financial statement classifications</p></div><span className="tag">{accounts.length} accounts</span></div><table><thead><tr><th>CODE</th><th>ACCOUNT NAME</th><th>TYPE</th><th>NORMAL BALANCE</th><th>STATUS</th><th></th></tr></thead><tbody>{accounts.map(account=><tr key={account.id}><td>{account.code}</td><td><strong>{account.name}</strong>{account.description&&<small className="cell-sub">{account.description}</small>}</td><td>{account.account_type}</td><td>{account.normal_balance}</td><td><span className={account.is_active?'status-pill active':'status-pill'}>{account.is_active?'Active':'Inactive'}</span></td><td>{role==='Admin'&&!account.is_system&&<button className="text-button" onClick={()=>void toggleAccount(account)}>{account.is_active?'Deactivate':'Activate'}</button>}</td></tr>)}</tbody></table></div>
             {role==='Admin'&&<form className="panel account-form" onSubmit={saveAccount}><h2>Add account</h2><div className="form-grid"><label>Account code<input required value={accountForm.code} onChange={e=>setAccountForm({...accountForm,code:e.target.value})} placeholder="e.g. 6950"/></label><label>Account name<input required value={accountForm.name} onChange={e=>setAccountForm({...accountForm,name:e.target.value})} placeholder="e.g. Cleaning expense"/></label><label>Account type<select value={accountForm.account_type} onChange={e=>setAccountForm({...accountForm,account_type:e.target.value as AccountType})}>{accountTypes.map(type=><option key={type}>{type}</option>)}</select></label><label>Description<input value={accountForm.description} onChange={e=>setAccountForm({...accountForm,description:e.target.value})} placeholder="Optional"/></label></div><p className="helper-text">Normal balance is selected automatically based on account type. System accounts cannot be deactivated.</p><button className="primary-button" disabled={saving}>Save account</button></form>}
           </section>}
-          <footer className="page-footer">Clothing Shop Accounting · LKR · Access restricted to Admin and Manager</footer>
+          <footer className="page-footer">{companySettings.company_name || 'Clothing Shop'} · Accounting · LKR · Access restricted to Admin and Manager</footer>
         </div>
       </main>
 
