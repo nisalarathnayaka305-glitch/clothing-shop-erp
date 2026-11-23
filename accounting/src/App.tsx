@@ -34,7 +34,8 @@ type Entry = {
   acct_journal_lines: Line[]
 }
 type Period = { id: string; name: string; period_start: string; period_end: string; status: 'Open' | 'Closed' }
-type Tab = 'overview' | 'profit' | 'balance' | 'trial' | 'journals' | 'accounts' | 'opening'
+type InventoryRow = { variant_id: string; product_id: string; product_no: string; sku: string; product_name: string; category: string | null; size: string; colour: string; quantity: number; reorder_level: number; unit_cost: number; estimated_value: number; active: boolean }
+type Tab = 'overview' | 'profit' | 'balance' | 'trial' | 'inventory' | 'journals' | 'accounts' | 'opening'
 
 const today = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Colombo' }).format(new Date())
 const monthStart = () => today().slice(0, 7) + '-01'
@@ -47,6 +48,7 @@ const nav: { id: Tab; label: string; group: string }[] = [
   { id: 'profit', label: 'Profit & Loss', group: 'REPORTS' },
   { id: 'balance', label: 'Balance Sheet', group: 'REPORTS' },
   { id: 'trial', label: 'Trial Balance', group: 'REPORTS' },
+  { id: 'inventory', label: 'Inventory Valuation', group: 'REPORTS' },
   { id: 'journals', label: 'Journal Entries', group: 'ACCOUNTING' },
   { id: 'opening', label: 'Opening Balances', group: 'ACCOUNTING' },
   { id: 'accounts', label: 'Chart of Accounts', group: 'ACCOUNTING' },
@@ -70,6 +72,7 @@ function App() {
   const [accounts, setAccounts] = useState<Account[]>([])
   const [entries, setEntries] = useState<Entry[]>([])
   const [periods, setPeriods] = useState<Period[]>([])
+  const [inventoryRows, setInventoryRows] = useState<InventoryRow[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [notice, setNotice] = useState('')
@@ -105,10 +108,13 @@ function App() {
       return
     }
     setRole(String(roleResult))
-    const [accountResult, entryResult, periodResult] = await Promise.all([
+    const [accountResult, entryResult, periodResult, productResult, variantResult, stockResult] = await Promise.all([
       supabase.from('acct_accounts').select('id,code,name,account_type,normal_balance,description,is_system,is_active').order('code'),
       supabase.from('acct_journal_entries').select('id,entry_no,entry_date,description,reference,source_type,status,created_at,acct_journal_lines(id,account_id,debit,credit,memo,acct_accounts(code,name,account_type))').order('entry_date', { ascending: false }).order('entry_no', { ascending: false }).limit(2000),
       supabase.from('acct_fiscal_periods').select('id,name,period_start,period_end,status').order('period_start', { ascending: false }),
+      supabase.from('products').select('id,product_no,sku,name,category,cost_price,active').order('product_no'),
+      supabase.from('product_variants').select('id,product_id,size,colour'),
+      supabase.from('stock_balances').select('variant_id,quantity,reorder_level'),
     ])
     if (accountResult.error) setError(accountResult.error.message)
     else setAccounts((accountResult.data || []) as Account[])
@@ -116,6 +122,36 @@ function App() {
     else setEntries((entryResult.data || []) as unknown as Entry[])
     if (periodResult.error) setError(periodResult.error.message)
     else setPeriods((periodResult.data || []) as Period[])
+    if (productResult.error) setError(productResult.error.message)
+    if (variantResult.error) setError(variantResult.error.message)
+    if (stockResult.error) setError(stockResult.error.message)
+    if (!productResult.error && !variantResult.error && !stockResult.error) {
+      const products = new Map((productResult.data || []).map((product: any) => [product.id, product]))
+      const variants = new Map((variantResult.data || []).map((variant: any) => [variant.id, variant]))
+      const rows = (stockResult.data || []).flatMap((stock: any) => {
+        const variant: any = variants.get(stock.variant_id)
+        const product: any = variant ? products.get(variant.product_id) : null
+        if (!variant || !product) return []
+        const unitCost = amount(product.cost_price)
+        const quantity = amount(stock.quantity)
+        return [{
+          variant_id: variant.id,
+          product_id: product.id,
+          product_no: product.product_no,
+          sku: product.sku,
+          product_name: product.name,
+          category: product.category,
+          size: variant.size,
+          colour: variant.colour,
+          quantity,
+          reorder_level: amount(stock.reorder_level),
+          unit_cost: unitCost,
+          estimated_value: quantity * unitCost,
+          active: Boolean(product.active),
+        }]
+      })
+      setInventoryRows(rows as InventoryRow[])
+    }
     setLoading(false)
   }, [])
 
@@ -123,7 +159,7 @@ function App() {
     void loadData()
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null)
-      if (!session?.user) { setRole(null); setAccounts([]); setEntries([]); setPeriods([]) }
+      if (!session?.user) { setRole(null); setAccounts([]); setEntries([]); setPeriods([]); setInventoryRows([]) }
       else window.setTimeout(() => void loadData(), 0)
     })
     return () => listener.subscription.unsubscribe()
@@ -356,6 +392,20 @@ function App() {
           </section>}
 
           {tab==='trial'&&<section className="view-stack"><div className="report-toolbar"><label className="single-date">As at date<input type="date" value={asAtDate} onChange={e=>setAsAtDate(e.target.value)}/></label><button className="secondary-button" onClick={()=>downloadCsv('trial-balance.csv',[['Code','Account','Debit','Credit'],...trial.map(r=>[r.account.code,r.account.name,r.debitBalance,r.creditBalance])])}>Export CSV</button></div><div className="panel"><div className="panel-heading"><div><h2>Trial Balance</h2><p>Posted account balances up to {asAtDate}</p></div></div><table><thead><tr><th>CODE</th><th>ACCOUNT</th><th className="num">DEBIT</th><th className="num">CREDIT</th></tr></thead><tbody>{trial.map(row=><tr key={row.account.id}><td>{row.account.code}</td><td>{row.account.name}</td><td className="num">{row.debitBalance?money(row.debitBalance):'—'}</td><td className="num">{row.creditBalance?money(row.creditBalance):'—'}</td></tr>)}</tbody><tfoot><tr><th colSpan={2}>TOTAL</th><th className="num">{money(trial.reduce((s,r)=>s+r.debitBalance,0))}</th><th className="num">{money(trial.reduce((s,r)=>s+r.creditBalance,0))}</th></tr></tfoot></table></div></section>}
+
+          {tab==='inventory'&&<section className="view-stack">
+            <div className="metric-grid">
+              <Metric label="Estimated inventory value" value={money(inventoryRows.reduce((sum,row)=>sum+row.estimated_value,0))} hint="Current on-hand quantity × product cost price"/>
+              <Metric label="Units on hand" value={inventoryRows.reduce((sum,row)=>sum+row.quantity,0).toLocaleString('en-LK')} hint="Across all stock variants"/>
+              <Metric label="Stock variants" value={inventoryRows.length.toLocaleString('en-LK')} hint="Variants with stock balance records"/>
+              <Metric label="Low-stock variants" value={inventoryRows.filter(row=>row.quantity<=row.reorder_level).length.toLocaleString('en-LK')} hint="At or below reorder level"/>
+            </div>
+            <div className="inventory-warning"><strong>Estimated value only — not an opening balance.</strong><span>This view uses the current product cost price multiplied by the current stock balance. It does not post journal entries, change stock, or create opening balances. Confirm purchase costs and the costing method before using this figure as a formal inventory valuation.</span></div>
+            <div className="panel">
+              <div className="panel-heading"><div><h2>Inventory by product and variant</h2><p>Live stock quantities from the ERP database</p></div><button className="secondary-button" onClick={()=>downloadCsv('inventory-valuation-estimate.csv',[['Product No','SKU','Product','Size','Colour','Quantity','Unit Cost','Estimated Value','Status'],...inventoryRows.map(row=>[row.product_no,row.sku,row.product_name,row.size,row.colour,row.quantity,row.unit_cost,row.estimated_value,row.quantity<=row.reorder_level?'Low stock':'In stock'])])}>Export CSV</button></div>
+              {inventoryRows.length===0?<div className="empty-state">No stock balance records found.</div>:<table><thead><tr><th>PRODUCT</th><th>VARIANT</th><th className="num">QTY</th><th className="num">UNIT COST</th><th className="num">ESTIMATED VALUE</th><th>STATUS</th></tr></thead><tbody>{inventoryRows.slice().sort((a,b)=>a.product_no.localeCompare(b.product_no)||a.size.localeCompare(b.size)||a.colour.localeCompare(b.colour)).map(row=><tr key={row.variant_id}><td><strong>{row.product_no} · {row.sku}</strong><small className="cell-sub">{row.product_name}{row.category?' · '+row.category:''}</small></td><td>{row.size} / {row.colour}</td><td className="num">{row.quantity.toLocaleString('en-LK')}</td><td className="num">{money(row.unit_cost)}</td><td className="num"><strong>{money(row.estimated_value)}</strong></td><td><span className={row.quantity<=row.reorder_level?'status-pill':'status-pill active'}>{row.quantity<=row.reorder_level?'Low stock':'In stock'}</span></td></tr>)}</tbody><tfoot><tr><th colSpan={2}>TOTAL</th><th className="num">{inventoryRows.reduce((sum,row)=>sum+row.quantity,0).toLocaleString('en-LK')}</th><th></th><th className="num">{money(inventoryRows.reduce((sum,row)=>sum+row.estimated_value,0))}</th><th></th></tr></tfoot></table>}
+            </div>
+          </section>}
 
           {tab==='journals'&&<section className="view-stack"><div className="panel"><div className="panel-heading"><div><h2>Journal Register</h2><p>All posted and reversed journal entries</p></div><span className="tag">{entries.length} entries</span></div><EntryTable entries={entries}/></div><div className="panel"><div className="panel-heading"><div><h2>General Ledger</h2><p>Select an account to view its transaction history.</p></div></div><div className="ledger-filter"><select value={selectedAccount} onChange={e=>setSelectedAccount(e.target.value)}><option value="">Select account</option>{accounts.map(account=><option key={account.id} value={account.id}>{account.code} · {account.name}</option>)}</select></div>{selectedAccount&&<table><thead><tr><th>DATE</th><th>ENTRY</th><th>DESCRIPTION</th><th className="num">DEBIT</th><th className="num">CREDIT</th></tr></thead><tbody>{selectedLedger.map(({entry,line})=><tr key={line.id}><td>{entry.entry_date}</td><td>{entry.entry_no}</td><td>{line.memo||entry.description}</td><td className="num">{amount(line.debit)?money(amount(line.debit)):'—'}</td><td className="num">{amount(line.credit)?money(amount(line.credit)):'—'}</td></tr>)}</tbody></table>}</div></section>}
 
