@@ -3,7 +3,13 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
-  "scripts": {"dev": "vite", "build": "tsc -b && vite build", "preview": "vite preview"},
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "build:accounting": "tsc -p accounting/tsconfig.json && vite build --config accounting/vite.config.ts",
+    "build:all": "npm run build && npm run build:accounting"
+  },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.1",
     "lucide-react": "^0.468.0",
