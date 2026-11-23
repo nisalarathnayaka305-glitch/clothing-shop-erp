@@ -53,10 +53,11 @@ function PhoneBarcodeScanner({sessionId,allowed}:{sessionId:string;allowed:boole
   const [scanning,setScanning]=useState(true)
   const [status,setStatus]=useState('Connecting to the laptop POS…')
   const [lastCode,setLastCode]=useState('')
+  const [scanChannel,setScanChannel]=useState<any>(null)
   useEffect(()=>{
     if(!supabase||!allowed){setStatus('Please sign in with an Admin, Manager or Cashier account.');return}
-    const channel=supabase.channel(`pos-scan-${sessionId}`).subscribe(state=>{if(state==='SUBSCRIBED')setStatus('Connected. Scan a product barcode.')})
-    return()=>{void supabase.removeChannel(channel)}
+    const channel=supabase.channel(`pos-scan-${sessionId}`).subscribe(state=>{if(state==='SUBSCRIBED'){setScanChannel(channel);setStatus('Connected. Scan a product barcode.')}})
+    return()=>{setScanChannel(null);void supabase.removeChannel(channel)}
   },[sessionId,allowed])
   useEffect(()=>{
     if(!scanning||!allowed)return
@@ -69,14 +70,13 @@ function PhoneBarcodeScanner({sessionId,allowed}:{sessionId:string;allowed:boole
       const value=String(code||'').trim()
       setLastCode(value)
       setStatus('Sending barcode to the laptop…')
-      const channel=supabase!.channel(`pos-scan-${sessionId}`)
-      await channel.send({type:'broadcast',event:'scan',payload:{code:value,scanned_at:new Date().toISOString()}})
-      await supabase!.removeChannel(channel)
+      if(!scanChannel){setStatus('Still connecting to the laptop. Please try again.');setScanning(false);return}
+      await scanChannel.send({type:'broadcast',event:'scan',payload:{code:value,scanned_at:new Date().toISOString()}})
       setStatus('Added to the laptop POS. Scan the next item.')
       setScanning(false)
     },()=>{}).catch(e=>{setStatus(e instanceof Error?e.message:'Camera could not start. Allow camera access.');setScanning(false)})
     return()=>{active=false;if(reader.isScanning)void reader.stop().catch(()=>{})}
-  },[scanning,sessionId,allowed])
+  },[scanning,sessionId,allowed,scanChannel])
   return <div className="phone-scanner-screen"><article className="phone-scanner-card"><div className="phone-scanner-brand"><Store size={26}/><b>Clothing ERP · Mobile Scanner</b></div><h1>Scan products</h1><p>{status}</p>{!allowed?<p>Access is limited to Admin, Manager and Cashier roles.</p>:<><div id="phone-pos-camera"/>{lastCode&&<p className="phone-scanner-last">Last scanned: <b>{lastCode}</b></p>}<button className="primary full" onClick={()=>{setLastCode('');setScanning(true)}} disabled={scanning}>Scan next product</button></>}<button className="text-button" onClick={()=>{window.location.href=window.location.pathname}}>Exit scanner</button></article></div>
 }
 
@@ -1228,7 +1228,7 @@ export default function App() {
 
   if (scannerSessionId && session) return <PhoneBarcodeScanner sessionId={scannerSessionId} allowed={['Admin','Manager','Cashier'].includes(currentEmployeeRole||'')} />
   return <div className={sidebarCollapsed ? 'shell sidebar-collapsed' : 'shell'}>
-    <aside><div className="retail-brand"><div className="retail-brand-mark">{companySettings.logo_data_url ? <img src={companySettings.logo_data_url} alt="Company logo"/> : <Store size={19}/>}</div><div className="brand-copy"><h2>{companySettings.company_name || 'Clothing ERP'}</h2><small>{companySettings.tagline || 'RETAIL MANAGEMENT'}</small></div></div>{(['Apps',...allowedPages].map(item => { const Icon = moduleIcons[item] || CircleHelp; return <button key={item} className={page === item ? 'active' : ''} onClick={() => setPage(item)} title={sidebarCollapsed ? item : undefined}><Icon size={17} strokeWidth={2}/><span className="nav-label">{item}</span></button> })}{supabaseConfigured && session && <a className="accounting-nav-link" href="/clothing-shop-erp/leave/" title={sidebarCollapsed?'Attendance & Leave':undefined}><CalendarCheck size={18} strokeWidth={2}/> <span className="nav-label">Attendance & Leave</span><span className="accounting-nav-arrow">↗</span></a>}{supabaseConfigured && session && ['Admin','Manager'].includes(currentEmployeeRole || '') && <a className="accounting-nav-link" href="/clothing-shop-erp/accounting/" title={sidebarCollapsed?'Accounting':undefined}><BookOpen size={18} strokeWidth={2}/> <span className="nav-label">Accounting</span><span className="accounting-nav-arrow">↗</span></a>}</aside>
+    <aside><div className="retail-brand"><div className="retail-brand-mark">{companySettings.logo_data_url ? <img src={companySettings.logo_data_url} alt="Company logo"/> : <Store size={19}/>}</div><div className="brand-copy"><h2>{companySettings.company_name || 'Clothing ERP'}</h2><small>{companySettings.tagline || 'RETAIL MANAGEMENT'}</small></div></div>{(['Apps',...allowedPages]).map(item => { const Icon = moduleIcons[item] || CircleHelp; return <button key={item} className={page === item ? 'active' : ''} onClick={() => setPage(item)} title={sidebarCollapsed ? item : undefined}><Icon size={17} strokeWidth={2}/><span className="nav-label">{item}</span></button> })}{supabaseConfigured && session && <a className="accounting-nav-link" href="/clothing-shop-erp/leave/" title={sidebarCollapsed?'Attendance & Leave':undefined}><CalendarCheck size={18} strokeWidth={2}/> <span className="nav-label">Attendance & Leave</span><span className="accounting-nav-arrow">↗</span></a>}{supabaseConfigured && session && ['Admin','Manager'].includes(currentEmployeeRole || '') && <a className="accounting-nav-link" href="/clothing-shop-erp/accounting/" title={sidebarCollapsed?'Accounting':undefined}><BookOpen size={18} strokeWidth={2}/> <span className="nav-label">Accounting</span><span className="accounting-nav-arrow">↗</span></a>}</aside>
     <main><header><div className="header-left"><button className="sidebar-toggle" onClick={()=>setSidebarCollapsed(value=>!value)} aria-label={sidebarCollapsed ? 'Show sidebar' : 'Hide sidebar'} title={sidebarCollapsed ? 'Show sidebar' : 'Hide sidebar'}>{sidebarCollapsed ? <PanelLeftOpen size={18}/> : <PanelLeftClose size={18}/>}</button><b>Workspace / {page}</b></div><div className="header-actions"><span className={supabaseConfigured ? 'ok' : 'demo'}>{supabaseConfigured ? 'Supabase connected' : 'Demo mode'}</span><button className="icon-button refresh-button" onClick={()=>window.location.reload()} aria-label="Refresh workspace" title="Refresh workspace"><RefreshCw size={16}/></button>{session && <button className="text-button" onClick={() => void signOut()}>Sign out</button>}</div></header>
       <section>
         {notice && <p className="notice">{notice}<button className="dismiss" onClick={() => setNotice('')}>×</button></p>}
