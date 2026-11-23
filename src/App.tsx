@@ -17,6 +17,13 @@ type Invoice = { invoice_no: string; subtotal: number; discount: number; total: 
 
 const navigation = ['Overview', 'Point of Sale', 'Sales History', 'Returns & Exchanges', 'Products & Stock', 'Purchases', 'Purchase Orders', 'Customers', 'Customer Accounts', 'Loyalty', 'Cash Management', 'Suppliers', 'Supplier Accounts', 'Expenses', 'Reports', 'Employees', 'Attendance', 'Payroll', 'Settings']
 const localBusinessDate = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Colombo' }).format(new Date())
+const localBusinessMonthRange = () => {
+  const [year, month] = localBusinessDate().split('-').map(Number)
+  const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate()
+  const monthText = String(month).padStart(2, '0')
+  return { start: `${year}-${monthText}-01`, end: `${year}-${monthText}-${String(lastDay).padStart(2, '0')}` }
+}
+const localBusinessYearStart = () => `${localBusinessDate().slice(0, 4)}-01-01`
 
 export default function App() {
   const [products, setProducts] = useState<Product[]>(demo)
@@ -57,7 +64,7 @@ export default function App() {
   const [customerPayments, setCustomerPayments] = useState<any[]>([])
   const [creditPaymentMethod, setCreditPaymentMethod] = useState('Cash')
   const [customerAccountQuery, setCustomerAccountQuery] = useState('')
-  const [customerPaymentForm, setCustomerPaymentForm] = useState({ sale_id: '', amount: '', payment_method: 'Cash', payment_date: new Date().toISOString().slice(0,10), reference_no: '', notes: '' })
+  const [customerPaymentForm, setCustomerPaymentForm] = useState({ sale_id: '', amount: '', payment_method: 'Cash', payment_date: localBusinessDate(), reference_no: '', notes: '' })
   const [sales, setSales] = useState<any[]>([])
   const [salesQuery, setSalesQuery] = useState('')
   const [salesDate, setSalesDate] = useState('')
@@ -73,32 +80,32 @@ export default function App() {
   const [supplierQuery, setSupplierQuery] = useState('')
   const [purchaseHistory, setPurchaseHistory] = useState<any[]>([])
   const [supplierPayments, setSupplierPayments] = useState<any[]>([])
-  const [supplierPaymentForm, setSupplierPaymentForm] = useState({ purchase_id: '', amount: '', payment_method: 'Cash', payment_date: new Date().toISOString().slice(0,10), reference_no: '', notes: '' })
+  const [supplierPaymentForm, setSupplierPaymentForm] = useState({ purchase_id: '', amount: '', payment_method: 'Cash', payment_date: localBusinessDate(), reference_no: '', notes: '' })
   const [supplierAccountQuery, setSupplierAccountQuery] = useState('')
 
   const [purchaseSupplier, setPurchaseSupplier] = useState('')
   const [purchaseLines, setPurchaseLines] = useState<Record<string, { quantity: string; unit_cost: string }>>({})
   const [purchaseReference, setPurchaseReference] = useState('')
-  const [purchaseDate, setPurchaseDate] = useState(new Date().toISOString().slice(0,10))
+  const [purchaseDate, setPurchaseDate] = useState(localBusinessDate())
   const [expenses, setExpenses] = useState<any[]>([])
-  const [expenseForm, setExpenseForm] = useState({ category: 'General', description: '', amount: '', payment_method: 'Cash', paid_to: '', supplier_id: '', expense_date: new Date().toISOString().slice(0,10), reference_no: '' })
+  const [expenseForm, setExpenseForm] = useState({ category: 'General', description: '', amount: '', payment_method: 'Cash', paid_to: '', supplier_id: '', expense_date: localBusinessDate(), reference_no: '' })
   const [expenseQuery, setExpenseQuery] = useState('')
   const [expenseCategoryFilter, setExpenseCategoryFilter] = useState('All')
-  const [expenseMonth, setExpenseMonth] = useState(new Date().toISOString().slice(0,7))
-  const [reportStart, setReportStart] = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0,10))
-  const [reportEnd, setReportEnd] = useState(new Date().toISOString().slice(0,10))
+  const [expenseMonth, setExpenseMonth] = useState(localBusinessDate().slice(0,7))
+  const [reportStart, setReportStart] = useState(localBusinessMonthRange().start)
+  const [reportEnd, setReportEnd] = useState(localBusinessDate())
   const [employees, setEmployees] = useState<any[]>([])
   const [currentEmployeeRole, setCurrentEmployeeRole] = useState<string | null>(null)
   const [employeeQuery, setEmployeeQuery] = useState('')
   const [employeeEditingId, setEmployeeEditingId] = useState<string | null>(null)
-  const [employeeForm, setEmployeeForm] = useState({ full_name: '', email: '', phone: '', job_title: '', department: '', employment_type: 'Full-time', hire_date: new Date().toISOString().slice(0,10), auth_user_id: '', role: 'Staff', status: 'Active', salary_basis: 'Monthly', base_salary: '0', notes: '' })
+  const [employeeForm, setEmployeeForm] = useState({ full_name: '', email: '', phone: '', job_title: '', department: '', employment_type: 'Full-time', hire_date: localBusinessDate(), auth_user_id: '', role: 'Staff', status: 'Active', salary_basis: 'Monthly', base_salary: '0', notes: '' })
   const [attendanceRecords, setAttendanceRecords] = useState<any[]>([])
   const [attendanceDate, setAttendanceDate] = useState(localBusinessDate())
   const [attendanceEmployeeId, setAttendanceEmployeeId] = useState('')
   const [payrollRuns, setPayrollRuns] = useState<any[]>([])
   const [payrollAttendance, setPayrollAttendance] = useState<any[]>([])
-  const [payrollStart, setPayrollStart] = useState(new Date(new Date().getFullYear(),new Date().getMonth(),1).toISOString().slice(0,10))
-  const [payrollEnd, setPayrollEnd] = useState(new Date(new Date().getFullYear(),new Date().getMonth()+1,0).toISOString().slice(0,10))
+  const [payrollStart, setPayrollStart] = useState(localBusinessMonthRange().start)
+  const [payrollEnd, setPayrollEnd] = useState(localBusinessMonthRange().end)
   const [payrollDeductions, setPayrollDeductions] = useState<Record<string,string>>({})
 
 
@@ -186,7 +193,7 @@ export default function App() {
 
   async function punchOut(record: any) {
     if (!record?.id || !session) return
-    if (attendanceDate !== new Date().toISOString().slice(0,10)) { setNotice('Check-out can only be recorded for today.'); return }
+    if (attendanceDate !== localBusinessDate()) { setNotice('Check-out can only be recorded for today.'); return }
     const isManager = ['Admin','Manager'].includes(currentEmployeeRole || '')
     setBusy(true)
     const { error } = isManager
@@ -250,12 +257,13 @@ export default function App() {
       .gte('work_date',payrollStart).lte('work_date',payrollEnd).limit(10000)
     if (attendanceError) { setNotice(attendanceError.message); setBusy(false); return }
     const items=active.map(employee=>{
-      const rows=(periodAttendance||[]).filter(r=>r.employee_id===employee.id)
+      const salaryStart = employee.hire_date && employee.hire_date > payrollStart ? employee.hire_date : payrollStart
+      const rows=(periodAttendance||[]).filter(r=>r.employee_id===employee.id && r.work_date>=salaryStart)
       const hours=rows.reduce((sum,r)=>sum+attendanceHours(r),0)
       const days=rows.reduce((sum,r)=>sum+(r.status==='Half-day'?0.5:['Present','Late'].includes(r.status)?1:0),0)
       const basis=employee.salary_basis||'Monthly'
       const rate=Number(employee.base_salary||0)
-      const gross=basis==='Hourly'?hours*rate:monthlyPayForPeriod(rate,payrollStart,payrollEnd)
+      const gross=basis==='Hourly'?hours*rate:monthlyPayForPeriod(rate,salaryStart,payrollEnd)
       const rawDeduction=Number(payrollDeductions[employee.id]||0); const deduction=Math.min(gross,Math.max(0,Number.isFinite(rawDeduction)?rawDeduction:0))
       return { employee_id:employee.id,salary_basis:basis,base_salary:rate,days_present:days,hours_worked:Number(hours.toFixed(2)),gross_pay:Number(gross.toFixed(2)),deductions:Number(deduction.toFixed(2)),net_pay:Number((gross-deduction).toFixed(2)) }
     })
@@ -273,6 +281,7 @@ export default function App() {
 
   async function markPayrollPaid(run: any) {
     if (!['Admin','Manager'].includes(currentEmployeeRole || '') || run.status!=='Draft') return
+    if (!Number.isFinite(Number(run.total_net)) || Number(run.total_net) <= 0) { setNotice('This payroll has zero net pay. Review employee salary details and payroll items before marking it as paid.'); return }
     if (!window.confirm('Confirm that all employees in this payroll run have actually been paid?')) return
     const { error }=await supabase!.from('payroll_runs').update({status:'Paid',paid_at:new Date().toISOString()}).eq('id',run.id)
     if(error) setNotice(error.message)
@@ -355,7 +364,7 @@ export default function App() {
       })
       if (error) { setNotice(error.message); setBusy(false); return }
       setNotice(`Customer payment ${data.payment_no} saved. Remaining balance: ${money(Number(data.outstanding))}.`)
-      setCustomerPaymentForm({ sale_id: '', amount: '', payment_method: 'Cash', payment_date: new Date().toISOString().slice(0,10), reference_no: '', notes: '' })
+      setCustomerPaymentForm({ sale_id: '', amount: '', payment_method: 'Cash', payment_date: localBusinessDate(), reference_no: '', notes: '' })
       await Promise.all([loadSales(),loadCustomerPayments()])
     } else {
       setNotice('Customer payments require a connected Supabase account; demo mode cannot persist account balances.')
@@ -400,7 +409,7 @@ export default function App() {
       setExpenses(current => [{ ...row, id: crypto.randomUUID(), expense_no: `EXP-DEMO-${Date.now()}`, created_at: new Date().toISOString(), suppliers: supplier ? { name: supplier.name } : null },...current])
       setNotice('Demo mode: expense is temporary and is not saved to Supabase.')
     }
-    setExpenseForm({ category: 'General', description: '', amount: '', payment_method: 'Cash', paid_to: '', supplier_id: '', expense_date: new Date().toISOString().slice(0,10), reference_no: '' })
+    setExpenseForm({ category: 'General', description: '', amount: '', payment_method: 'Cash', paid_to: '', supplier_id: '', expense_date: localBusinessDate(), reference_no: '' })
     setBusy(false)
   }
 
@@ -457,7 +466,7 @@ export default function App() {
       })
       if (error) { setNotice(error.message); setBusy(false); return }
       setNotice(`Supplier payment ${data.payment_no} saved. Remaining invoice balance: ${money(Number(data.outstanding))}.`)
-      setSupplierPaymentForm({ purchase_id: '', amount: '', payment_method: 'Cash', payment_date: new Date().toISOString().slice(0,10), reference_no: '', notes: '' })
+      setSupplierPaymentForm({ purchase_id: '', amount: '', payment_method: 'Cash', payment_date: localBusinessDate(), reference_no: '', notes: '' })
       await Promise.all([loadPurchases(),loadSupplierPayments(),loadExpenses()])
     } else {
       setNotice('Supplier payments require a connected Supabase account; demo mode cannot persist account balances.')
@@ -653,7 +662,7 @@ export default function App() {
             p_customer_id: selectedCustomer,
             p_amount_received: received,
             p_initial_payment_method: creditPaymentMethod,
-            p_payment_date: new Date().toISOString().slice(0,10),
+            p_payment_date: localBusinessDate(),
           })
         : await supabase.rpc('complete_sale_for_customer', {
             p_items: cart.map(line => ({ variant_id: line.variant_id, quantity: line.quantity })),
@@ -816,7 +825,7 @@ export default function App() {
       else {
         setNotice(employeeEditingId ? 'Employee updated successfully.' : 'Employee added successfully.')
         setEmployeeEditingId(null)
-        setEmployeeForm({ full_name: '', email: '', phone: '', job_title: '', department: '', employment_type: 'Full-time', hire_date: new Date().toISOString().slice(0,10), auth_user_id: '', role: 'Staff', status: 'Active', salary_basis: 'Monthly', base_salary: '0', notes: '' })
+        setEmployeeForm({ full_name: '', email: '', phone: '', job_title: '', department: '', employment_type: 'Full-time', hire_date: localBusinessDate(), auth_user_id: '', role: 'Staff', status: 'Active', salary_basis: 'Monthly', base_salary: '0', notes: '' })
         await loadEmployees()
       }
     } else {
@@ -824,7 +833,7 @@ export default function App() {
       setEmployees(current => employeeEditingId ? current.map(e=>e.id===employeeEditingId?local:e) : [local,...current])
       setNotice('Demo mode: employee record is temporary.')
       setEmployeeEditingId(null)
-      setEmployeeForm({ full_name: '', email: '', phone: '', job_title: '', department: '', employment_type: 'Full-time', hire_date: new Date().toISOString().slice(0,10), auth_user_id: '', role: 'Staff', status: 'Active', salary_basis: 'Monthly', base_salary: '0', notes: '' })
+      setEmployeeForm({ full_name: '', email: '', phone: '', job_title: '', department: '', employment_type: 'Full-time', hire_date: localBusinessDate(), auth_user_id: '', role: 'Staff', status: 'Active', salary_basis: 'Monthly', base_salary: '0', notes: '' })
     }
     setBusy(false)
   }
@@ -955,17 +964,20 @@ export default function App() {
   }
 
   const filtered = products.filter(p => `${p.product_no} ${p.name} ${p.sku} ${p.category || ''}`.toLowerCase().includes(query.toLowerCase()))
-  const todayKey = new Date().toLocaleDateString('en-CA')
+  const todayKey = localBusinessDate()
   const monthKey = todayKey.slice(0,7)
   const dateInRange = (value: string, start: string, end: string) => {
-    const key = String(value || '').slice(0,10)
+    const raw = String(value || '')
+    const key = raw.includes('T')
+      ? new Date(raw).toLocaleDateString('en-CA', { timeZone: 'Asia/Colombo' })
+      : raw.slice(0,10)
     return key >= start && key <= end
   }
-  const todaySales = sales.filter(s => String(s.created_at).slice(0,10) === todayKey)
-  const monthSales = sales.filter(s => String(s.created_at).slice(0,7) === monthKey)
+  const todaySales = sales.filter(s => dateInRange(s.created_at,todayKey,todayKey))
+  const monthSales = sales.filter(s => dateInRange(s.created_at,`${monthKey}-01`,todayKey))
   const todayRevenue = todaySales.reduce((sum,s)=>sum+Number(s.total),0)
   const monthRevenue = monthSales.reduce((sum,s)=>sum+Number(s.total),0)
-  const monthReturns = returns.filter(r=>String(r.created_at).slice(0,7)===monthKey)
+  const monthReturns = returns.filter(r=>dateInRange(r.created_at,`${monthKey}-01`,todayKey))
   const monthRefunds = monthReturns.reduce((sum,r)=>sum+Number(r.refund_total),0)
   const monthCOGS = monthSales.reduce((sum,s)=>sum+(s.sale_items||[]).reduce((n:number,line:any)=>n+Number(line.unit_cost||0)*Number(line.quantity||0),0),0)
     - monthReturns.filter(r=>r.restock_items).reduce((sum,r)=>sum+(r.sales_return_items||[]).reduce((n:number,line:any)=>{const sold=monthSales.flatMap(s=>s.sale_items||[]).find((x:any)=>x.id===line.sale_item_id);return n+Number(sold?.unit_cost||0)*Number(line.quantity||0)},0),0)
@@ -984,7 +996,7 @@ export default function App() {
   const reportOperatingExpenses = reportExpenses.filter(e=>e.category!=='Supplier Payment').reduce((sum,e)=>sum+Number(e.amount),0)
   const reportGrossProfit = reportRevenue-reportRefunds-reportCOGS
   const reportNetProfit = reportGrossProfit-reportOperatingExpenses
-  const paymentBreakdown = ['Cash','Card','Bank Transfer'].map(method=>({method,count:reportSales.filter(s=>s.payment_method===method).length,total:reportSales.filter(s=>s.payment_method===method).reduce((sum,s)=>sum+Number(s.total),0)}))
+  const paymentBreakdown = ['Cash','Card','Bank Transfer','Credit'].map(method=>({method,count:reportSales.filter(s=>s.payment_method===method).length,total:reportSales.filter(s=>s.payment_method===method).reduce((sum,s)=>sum+Number(s.total),0)}))
   const topProducts = Object.values(reportSales.flatMap(s=>s.sale_items||[]).reduce((acc:any,line:any)=>{const key=line.product_no||line.product_name;acc[key]??={name:line.product_name,productNo:line.product_no,quantity:0,revenue:0};acc[key].quantity+=Number(line.quantity);acc[key].revenue+=Number(line.line_total);return acc},{})).sort((x:any,y:any)=>y.quantity-x.quantity).slice(0,8)
   const expenseBreakdown = Object.values(reportExpenses.reduce((acc:any,e:any)=>{acc[e.category]??={category:e.category,total:0,count:0};acc[e.category].total+=Number(e.amount);acc[e.category].count++;return acc},{})).sort((x:any,y:any)=>y.total-x.total)
   const lowStockItems = posVariants.filter(v=>v.quantity<=v.reorder_level).sort((x,y)=>x.quantity-y.quantity).slice(0,8)
@@ -1073,7 +1085,7 @@ export default function App() {
             link.remove();
             URL.revokeObjectURL(url);
           }}>Export CSV</button></div></div>
-          <article className="report-filter"><label>From<input type="date" value={reportStart} max={reportEnd} onChange={e=>setReportStart(e.target.value)}/></label><label>To<input type="date" value={reportEnd} min={reportStart} onChange={e=>setReportEnd(e.target.value)}/></label><button onClick={()=>{const d=new Date();setReportEnd(d.toISOString().slice(0,10));setReportStart(new Date(d.getFullYear(),d.getMonth(),1).toISOString().slice(0,10))}}>This month</button><button onClick={()=>{const d=new Date();setReportEnd(d.toISOString().slice(0,10));setReportStart(new Date(d.getFullYear(),0,1).toISOString().slice(0,10))}}>This year</button></article>
+          <article className="report-filter"><label>From<input type="date" value={reportStart} max={reportEnd} onChange={e=>setReportStart(e.target.value)}/></label><label>To<input type="date" value={reportEnd} min={reportStart} onChange={e=>setReportEnd(e.target.value)}/></label><button onClick={()=>{const d=new Date();setReportEnd(localBusinessDate());setReportStart(localBusinessMonthRange().start)}}>This month</button><button onClick={()=>{const d=new Date();setReportEnd(localBusinessDate());setReportStart(localBusinessYearStart())}}>This year</button></article>
           <div className="stats report-stats">{[[ 'Sales Subtotal',money(reportGrossSales) ],[ 'Discounts',money(reportDiscounts) ],[ 'Refunds',money(reportRefunds) ],[ 'Net Sales',money(reportRevenue-reportRefunds) ],[ 'Gross Profit (Est.)',money(reportGrossProfit) ],[ 'Operating Expenses',money(reportOperatingExpenses) ],[ 'Net Profit (Est.)',money(reportNetProfit) ]].map(([label,value])=><article key={label}><small>{label}</small><h2>{value}</h2></article>)}</div>
           <div className="dashboard-grid">
             <article><h3>Sales by payment method</h3><div className="report-list">{paymentBreakdown.map(x=><div key={x.method}><span>{x.method}<small>{x.count} transactions</small></span><b>{money(x.total)}</b></div>)}</div></article>
@@ -1095,7 +1107,7 @@ export default function App() {
             <p>Your current login is not linked to an active employee profile with Admin or Manager access. Ask the shop owner to complete the one-time administrator setup described in <code>supabase/migrations/0010_employee_management.sql</code>.</p>
             <p className="muted">Employee records and role changes are protected by Supabase Row Level Security. Do not disable those policies to make this screen work.</p>
           </article> : <>
-            {currentEmployeeRole === 'Admin' && <article className="employee-entry"><div className="toolbar"><h3>{employeeEditingId ? 'Update employee' : 'Add new employee'}</h3>{employeeEditingId && <button type="button" onClick={()=>{setEmployeeEditingId(null);setEmployeeForm({ full_name: '', email: '', phone: '', job_title: '', department: '', employment_type: 'Full-time', hire_date: new Date().toISOString().slice(0,10), auth_user_id: '', role: 'Staff', status: 'Active', salary_basis: 'Monthly', base_salary: '0', notes: '' })}}>Cancel edit</button>}</div>
+            {currentEmployeeRole === 'Admin' && <article className="employee-entry"><div className="toolbar"><h3>{employeeEditingId ? 'Update employee' : 'Add new employee'}</h3>{employeeEditingId && <button type="button" onClick={()=>{setEmployeeEditingId(null);setEmployeeForm({ full_name: '', email: '', phone: '', job_title: '', department: '', employment_type: 'Full-time', hire_date: localBusinessDate(), auth_user_id: '', role: 'Staff', status: 'Active', salary_basis: 'Monthly', base_salary: '0', notes: '' })}}>Cancel edit</button>}</div>
               <form className="employee-form" onSubmit={saveEmployee}>
                 <label>Full name<input required value={employeeForm.full_name} onChange={e=>setEmployeeForm({...employeeForm,full_name:e.target.value})}/></label>
                 <label>Email<input type="email" value={employeeForm.email} onChange={e=>setEmployeeForm({...employeeForm,email:e.target.value})}/></label>
@@ -1127,7 +1139,7 @@ export default function App() {
             <div><small>ATTENDANCE DATE</small><input type="date" value={attendanceDate} onChange={e=>setAttendanceDate(e.target.value)}/></div>
             {['Admin','Manager'].includes(currentEmployeeRole||'') && <div><small>EMPLOYEE</small><select value={attendanceEmployeeId || (employees.find(e=>e.auth_user_id===session?.user.id)?.id || '')} onChange={e=>setAttendanceEmployeeId(e.target.value)}><option value="">Select employee</option>{employees.filter(e=>e.status==='Active').map(e=><option key={e.id} value={e.id}>{e.employee_no} – {e.full_name}</option>)}</select></div>}
             <div className="punch-actions">
-              {(() => { const own=employees.find(e=>e.auth_user_id===session?.user.id); const targetId=['Admin','Manager'].includes(currentEmployeeRole||'')?(attendanceEmployeeId||own?.id||''):(own?.id||''); const todayRecord=attendanceRecords.find(r=>r.employee_id===targetId&&r.work_date===attendanceDate); return <><button className="primary" disabled={busy||!targetId||!!todayRecord?.check_in||attendanceDate!==localBusinessDate()} onClick={()=>void punchIn(targetId)}>Check in</button><button disabled={busy||!todayRecord?.check_in||!!todayRecord?.check_out||attendanceDate!==new Date().toISOString().slice(0,10)} onClick={()=>void punchOut(todayRecord)}>Check out</button><span className="muted">{attendanceDate!==new Date().toISOString().slice(0,10)?'Punching is available for today only.':todayRecord?.check_in?todayRecord.check_out?'Shift completed': 'Checked in at '+new Date(todayRecord.check_in).toLocaleTimeString('en-LK',{timeZone:'Asia/Colombo'}): 'No check-in recorded for this date.'}</span></> })()}
+              {(() => { const own=employees.find(e=>e.auth_user_id===session?.user.id); const targetId=['Admin','Manager'].includes(currentEmployeeRole||'')?(attendanceEmployeeId||own?.id||''):(own?.id||''); const todayRecord=attendanceRecords.find(r=>r.employee_id===targetId&&r.work_date===attendanceDate); return <><button className="primary" disabled={busy||!targetId||!!todayRecord?.check_in||attendanceDate!==localBusinessDate()} onClick={()=>void punchIn(targetId)}>Check in</button><button disabled={busy||!todayRecord?.check_in||!!todayRecord?.check_out||attendanceDate!==localBusinessDate()} onClick={()=>void punchOut(todayRecord)}>Check out</button><span className="muted">{attendanceDate!==localBusinessDate()?'Punching is available for today only.':todayRecord?.check_in?todayRecord.check_out?'Shift completed': 'Checked in at '+new Date(todayRecord.check_in).toLocaleTimeString('en-LK',{timeZone:'Asia/Colombo'}): 'No check-in recorded for this date.'}</span></> })()}
             </div>
           </article>
           {!session && supabaseConfigured && <article><p>Please sign in to record attendance.</p></article>}
@@ -1160,7 +1172,7 @@ export default function App() {
               {sales.filter(s => {
                 const customer = Array.isArray(s.customers) ? s.customers[0] : s.customers
                 const term = `${s.invoice_no} ${customer?.full_name || 'Walk-in'} ${customer?.phone || ''}`.toLowerCase()
-                return term.includes(salesQuery.toLowerCase()) && (!salesDate || new Date(s.created_at).toLocaleDateString('en-CA') === salesDate)
+                return term.includes(salesQuery.toLowerCase()) && (!salesDate || new Date(s.created_at).toLocaleDateString('en-CA',{timeZone:'Asia/Colombo'}) === salesDate)
               }).map(s => { const customer = Array.isArray(s.customers) ? s.customers[0] : s.customers; return <tr key={s.id}><td>{new Date(s.created_at).toLocaleString()}</td><td><b>{s.invoice_no}</b></td><td>{customer?.full_name || 'Walk-in customer'}</td><td>{s.payment_method}</td><td>{s.sale_items?.reduce((n:number,i:any)=>n+i.quantity,0) || 0}</td><td>{money(Number(s.total))}</td><td><button className="small-action" onClick={() => setSelectedSale(s)}>View invoice</button></td></tr> })}
               {sales.length === 0 && <tr><td colSpan={7}>No sales recorded yet.</td></tr>}
             </tbody></table></div>
